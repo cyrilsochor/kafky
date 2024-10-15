@@ -11,12 +11,16 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiFunction;
 
-@SuppressWarnings("unchecked")
+@SuppressWarnings({
+        "unchecked",
+        "java:S3740",
+})
 public class PropertiesUtils {
 
     private PropertiesUtils() {
@@ -29,9 +33,14 @@ public class PropertiesUtils {
 
     public static void addProperties(final Map<Object, Object> target, final Map<Object, Object> sourceLowerPriority, final String prefix) {
         if (sourceLowerPriority != null) {
-            sourceLowerPriority.forEach((k, v) -> {
-                if (!target.containsKey(k)) {
-                    target.put(prefix + k, v);
+            sourceLowerPriority.forEach((key, sValue) -> {
+                if (!target.containsKey(key)) {
+                    target.put(prefix + key, sValue);
+                } else if (sValue instanceof Map sValueMap) {
+                    final Object tValue = target.get(key);
+                    assertTrue(tValue instanceof Map,
+                            () -> format("Expected %s, actual %s", Map.class.getName(), tValue.getClass().getName()));
+                    addProperties((Map<Object, Object>) tValue, sValueMap);
                 }
             });
         }
@@ -186,6 +195,28 @@ public class PropertiesUtils {
         final List<String> list = getRequired(properties, key, PropertiesUtils::parseListOfStrings);
         assertTrue(isNotEmpty(list), () -> format("At least one of %s is required", key));
         return list;
+    }
+
+    /* Map */
+
+    private static Map<Object, Object> parseMap(final String key, final Object value) {
+        if (value instanceof Map map) {
+            return map;
+        } else {
+            throw new InvalidPropertyType(key, value.getClass(), Map.class);
+        }
+    }
+
+    public static Map<Object, Object> getMapRequired(final Map<Object, Object> properties, final String key) {
+        return getRequired(properties, key, PropertiesUtils::parseMap);
+    }
+
+    public static Map<Object, Object> getMapOrInsert(final Map<Object, Object> properties, final String key) {
+        return (Map<Object, Object>) properties.computeIfAbsent(key, k -> new HashMap<>());
+    }
+
+    public static Map<Object, Object> getMap(final Map<Object, Object> properties, final String key) {
+        return get(properties, key, PropertiesUtils::parseMap);
     }
 
     /* List of Maps */

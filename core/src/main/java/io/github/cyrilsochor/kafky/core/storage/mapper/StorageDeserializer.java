@@ -1,6 +1,7 @@
 package io.github.cyrilsochor.kafky.core.storage.mapper;
 
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
+import static io.github.cyrilsochor.kafky.core.util.Assert.fail;
 import static java.lang.String.format;
 
 import io.github.cyrilsochor.kafky.api.job.Producer;
@@ -20,9 +21,6 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
-
-import javax.print.DocFlavor.BYTE_ARRAY;
 
 public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
 
@@ -62,20 +60,27 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
         final Object orgValue = message.value();
         Object newValue = orgValue;
         if (orgValue != null) {
-            if (orgValue instanceof Map<?, ?> map) {
-                if (map.containsKey(AVROConstants.RECORD)) {
-                    newValue = toIndexedRecord((Map<?, ?>) map.get(AVROConstants.RECORD));
-                }
+            if (orgValue instanceof Map<?, ?> map && map.containsKey(AVROConstants.RECORD)) {
+                newValue = toIndexedRecord((Map<?, ?>) map.get(AVROConstants.RECORD));
+            } else {
+                fail(format("Unable to deserialize value %s", orgValue));
             }
         }
 
-        final ConsumerRecord<Object, Object> record = new ConsumerRecord<>(
+        final ConsumerRecord<Object, Object> rec = new ConsumerRecord<>(
                 message.topic(),
                 message.partition(),
                 message.offset(),
                 newKey,
                 newValue);
 
+        deserializeHeaders(message, rec);
+
+        LOG.debug("Converted: {}", message);
+        return rec;
+    }
+
+    protected void deserializeHeaders(final Message message, final ConsumerRecord<Object, Object> rec) {
         for (final Header headerTemplate : message.headers()) {
             final String headerKey = headerTemplate.key();
             final Object headerValueTemplate = headerTemplate.value();
@@ -91,11 +96,8 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
                 throw new IllegalStateException("Unsupported header value class " + headerValueTemplate.getClass().getName());
             }
 
-            record.headers().add(headerKey, headerBytes);
+            rec.headers().add(headerKey, headerBytes);
         }
-
-        LOG.debug("Converted: {}", message);
-        return record;
     }
 
     protected Object toIndexedRecord(final Map<?, ?> map) {
@@ -112,7 +114,7 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
     protected Object valueFromTemplate(final Object source, final Schema schema) {
         final String name = schema.getName();
         final Type type = schema.getType();
-        LOG.debug("Fill name {}, type {}: {}", name, type, source);
+        LOG.trace("Fill name {}, type {}: {}", name, type, source);
 
         return switch (type) {
         case INT -> ((Number) source).intValue();
@@ -128,8 +130,10 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
             final List<Schema> possibleSchemas = new LinkedList<>();
             for (Schema unionSchema : schema.getTypes()) {
                 if (unionSchema.getType() == Type.NULL) {
-                    if (source == null) {
+                    if (source == null) { //NOSONAR
                         yield null;
+                    } else {
+                        // continue without add to possibleSchemas
                     }
                 } else {
                     possibleSchemas.add(unionSchema);
@@ -146,12 +150,12 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
             yield list;
         }
         case RECORD -> {
-            final Record record = new GenericData.Record(schema);
+            final Record rec = new GenericData.Record(schema);
             final Map<?, ?> sourceMap = (Map<?, ?>) source;
             for (Field field : schema.getFields()) {
-                record.put(field.pos(), valueFromTemplate(sourceMap.get(field.name()), field.schema()));
+                rec.put(field.pos(), valueFromTemplate(sourceMap.get(field.name()), field.schema()));
             }
-            yield record;
+            yield rec;
         }
         default -> {
             LOG.warn("Unknown type {} of template field {}", type, name);

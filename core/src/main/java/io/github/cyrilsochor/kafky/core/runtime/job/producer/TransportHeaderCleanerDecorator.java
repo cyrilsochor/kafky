@@ -1,17 +1,16 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 
 import io.github.cyrilsochor.kafky.api.job.producer.AbstractRecordDecorator;
-import io.github.cyrilsochor.kafky.api.job.producer.RecordDecorator;
 import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Headers;
 
-import java.util.Properties;
+import java.util.Map;
 
-public class TransportHeaderCleanerDecorator extends AbstractRecordDecorator implements RecordDecorator {
+public class TransportHeaderCleanerDecorator extends AbstractRecordDecorator {
 
-    public static RecordProducer of(final Properties properties) throws ClassNotFoundException {
+    public static RecordProducer of(final Map<Object, Object> cfg) {
         return new TransportHeaderCleanerDecorator();
     }
 
@@ -21,16 +20,16 @@ public class TransportHeaderCleanerDecorator extends AbstractRecordDecorator imp
     }
 
     @Override
-    public ProducerRecord<Object, Object> decorate(final ProducerRecord<Object, Object> record) throws Exception {
+    public ProducerRecord<Object, Object> decorate(final ProducerRecord<Object, Object> rec) throws Exception {
 
-        final Headers headers = record.headers();
+        final Headers headers = rec.headers();
         if (headers != null) {
             for (final String header : KafkyDefaults.TRANSPORT_HEADERS) {
                 headers.remove(header);
             }
         }
 
-        return record;
+        return rec;
     }
 
 }

@@ -4,16 +4,12 @@ import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_CONS
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_PRODUCER_PROPERTIES;
 import static io.github.cyrilsochor.kafky.core.runtime.JobState.CANCELING;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
-import static io.github.cyrilsochor.kafky.core.util.ObjectUtils.firstNonNullLong;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.addProperties;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 
 import io.github.cyrilsochor.kafky.core.config.KafkyConfiguration;
-import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
-import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
-import io.github.cyrilsochor.kafky.core.config.KafkyReportConfig;
 import io.github.cyrilsochor.kafky.core.report.Report;
 import io.github.cyrilsochor.kafky.core.runtime.job.consumer.ConsumerJob;
 import io.github.cyrilsochor.kafky.core.runtime.job.producer.ProducerJob;
@@ -23,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -38,9 +35,6 @@ public class Runtime {
     private static final Logger LOG = LoggerFactory.getLogger(Runtime.class);
 
     public class Shutdown implements Runnable {
-
-        public Shutdown() {
-        }
 
         @Override
         public void run() {
@@ -102,21 +96,19 @@ public class Runtime {
         final List<Job> jobs = new LinkedList<>();
 
         for (final Map.Entry<Object, Object> consumerEntry : cfg.consumers().entrySet()) {
-            final Properties props = new Properties();
-            addProperties(props, (Map<Object, Object>) consumerEntry.getValue(), KafkyConsumerConfig.PREFIX);
-            addProperties(props, cfg.globalConsumers());
-            addProperties(props, cfg.global());
-            addProperties(props, DEFAULT_CONSUMER_PROPERTIES);
-            jobs.add(ConsumerJob.of((String) consumerEntry.getKey(), props));
+            final Map<Object, Object> jobCfg = new HashMap<>((Map<Object, Object>) consumerEntry.getValue());
+            addProperties(jobCfg, cfg.globalConsumers());
+            addProperties(jobCfg, cfg.global());
+            addProperties(jobCfg, DEFAULT_CONSUMER_PROPERTIES);
+            jobs.add(ConsumerJob.of((String) consumerEntry.getKey(), jobCfg));
         }
 
         for (final Map.Entry<Object, Object> producerEntry : cfg.producers().entrySet()) {
-            final Properties props = new Properties();
-            addProperties(props, (Map<Object, Object>) producerEntry.getValue(), KafkyProducerConfig.PREFIX);
-            addProperties(props, cfg.globalProducers());
-            addProperties(props, cfg.global());
-            addProperties(props, DEFAULT_PRODUCER_PROPERTIES);
-            jobs.add(ProducerJob.of((String) producerEntry.getKey(), props));
+            final Map<Object, Object>  jobCfg = new HashMap<>((Map<Object, Object>) producerEntry.getValue());
+            addProperties(jobCfg, cfg.globalProducers());
+            addProperties(jobCfg, cfg.global());
+            addProperties(jobCfg, DEFAULT_PRODUCER_PROPERTIES);
+            jobs.add(ProducerJob.of((String) producerEntry.getKey(), jobCfg));
         }
 
         for (final Job job : jobs) {

@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
 import java.util.Random;
 
 public class RandomRecordProducer implements RecordProducer {
@@ -33,8 +33,8 @@ public class RandomRecordProducer implements RecordProducer {
     protected final Class<? extends Object> valueClass;
     protected final Random random = new Random();
 
-    public static RecordProducer of(final Properties properties) throws ClassNotFoundException {
-        final Class<? extends Object> valueClass = PropertiesUtils.getClass(properties, Object.class,
+    public static RecordProducer of(final Map<Object, Object> cfg) throws ClassNotFoundException {
+        final Class<? extends Object> valueClass = PropertiesUtils.getClass(cfg, Object.class,
                 KafkyProducerConfig.GENERATOR_VALUE_CLASS);
 
         if (valueClass == null) {
@@ -81,9 +81,7 @@ public class RandomRecordProducer implements RecordProducer {
             } else {
                 final Object value = valueClass.getConstructor().newInstance();
                 if (value instanceof GenericRecord gr) {
-                    for (final Field field : gr.getSchema().getFields()) {
-                        generateField(0, gr, field, field.schema());
-                    }
+                    generateGenericRecord(gr);
                 }
                 return value;
             }
@@ -96,13 +94,19 @@ public class RandomRecordProducer implements RecordProducer {
         }
     }
 
-    private void generateField(final int depth, final IndexedRecord record, final Field field, final Schema schema) {
+    protected void generateGenericRecord(GenericRecord gr) {
+        for (final Field field : gr.getSchema().getFields()) {
+            generateField(0, gr, field, field.schema());
+        }
+    }
+
+    private void generateField(final int depth, final IndexedRecord rec, final Field field, final Schema schema) {
         final String name = field.name();
         final int index = field.pos();
         LOG.trace("Generating value of field name: {}, position: {}, field: {}", name, index, field);
 
         final Object value = generateFieldValue(depth, name, schema);
-        record.put(index, value);
+        rec.put(index, value);
     }
 
     private Object generateFieldValue(final int depth, final String fieldName, final Schema schema) {
@@ -125,12 +129,12 @@ public class RandomRecordProducer implements RecordProducer {
             yield list;
         }
         case RECORD -> {
-            final Record record = new Record(schema);
+            final Record rec = new Record(schema);
             for (final Field field : schema.getFields()) {
-                generateField(depth + 1, record, field, field.schema());
+                generateField(depth + 1, rec, field, field.schema());
             }
 
-            yield record;
+            yield rec;
         }
         case BYTES -> {
             final byte[] bytes = new byte[random.nextInt(100)];

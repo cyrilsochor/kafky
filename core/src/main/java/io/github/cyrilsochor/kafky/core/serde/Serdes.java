@@ -32,4 +32,8 @@ public class Serdes {
         return OBJECT_MAPPER;
     }
 
+    private Serdes() {
+        // no instance
+    }
+
 }

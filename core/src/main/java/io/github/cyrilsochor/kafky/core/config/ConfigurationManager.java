@@ -5,12 +5,15 @@ import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.addPropertie
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cyrilsochor.kafky.core.serde.Serdes;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -27,10 +30,29 @@ public class ConfigurationManager {
 
         LOG.info("Reading configuration file {}", cfgPath.toAbsolutePath());
 
-        final ObjectMapper mapper = Serdes.getDefaultObjectMapper();
-        final KafkyConfiguration cfg = mapper.readValue(Files.newBufferedReader(cfgPath), KafkyConfiguration.class);
+        if (isEmpty(cfgPath)) {
+            return new KafkyConfiguration(
+                    new HashMap<>(),
+                    new HashMap<>(),
+                    new HashMap<>(),
+                    new HashMap<>(),
+                    new HashMap<>(),
+                    new HashMap<>());
+        } else {
+            final ObjectMapper mapper = Serdes.getDefaultObjectMapper();
+            return mapper.readValue(Files.newBufferedReader(cfgPath), KafkyConfiguration.class);
+        }
+    }
 
-        return cfg;
+    protected static boolean isEmpty(final Path cfgPath) throws IOException {
+        try (final BufferedReader reader = Files.newBufferedReader(cfgPath)) {
+            for (String line = reader.readLine(); line != null; line = reader.readLine()) {
+                if (!StringUtils.isBlank(line)) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     public static void merge(final KafkyConfiguration target, final KafkyConfiguration sourceLowerPriority) {
@@ -43,16 +65,23 @@ public class ConfigurationManager {
     }
 
     protected static void mergeByKey(final Map<Object, Object> target, final Map<Object, Object> source) {
-        for (Entry<Object, Object> sourceConsumer : source.entrySet()) {
-            final String key = (String) sourceConsumer.getKey();
-            final Map<Object, Object> sourceValues = (Map<Object, Object>) sourceConsumer.getValue();
+        for (Entry<Object, Object> sourceEntry : source.entrySet()) {
+            final String key = (String) sourceEntry.getKey();
+            final Map<Object, Object> sourceValues = (Map<Object, Object>) sourceEntry.getValue();
             final Map<Object, Object> targetValues = (Map<Object, Object>) target.get(key);
-            if (targetValues == null) {
-                target.put(key, sourceValues);
-            } else {
-                PropertiesUtils.addProperties(targetValues, sourceValues);
+            LOG.trace("Merging key {}, sourceValues: {}, targetValues: {}", key, sourceValues, targetValues);
+            if (sourceValues != null) {
+                if (targetValues == null) {
+                    target.put(key, sourceValues);
+                } else {
+                    PropertiesUtils.addProperties(targetValues, sourceValues);
+                }
             }
         }
+    }
+
+    private ConfigurationManager() {
+        // no instance
     }
 
 }

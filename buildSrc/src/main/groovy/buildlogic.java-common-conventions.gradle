@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'maven-publish'
 }
 
 repositories {
@@ -26,4 +27,12 @@ tasks.named('test') {
 
 tasks.withType(JavaCompile) {
     options.compilerArgs += ['-Xlint:unchecked']
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
 }

@@ -6,15 +6,23 @@ import java.util.function.Supplier;
 
 public class Assert {
 
+    public static void fail(final String errorMessage) {
+        throw new AssertException(errorMessage);
+    }
+
+    public static void fail(final Supplier<String> errorMessageProvider) {
+        fail(errorMessageProvider.get());
+    }
+
     public static void assertTrue(final boolean condition, final String errorMessage) {
         if (!condition) {
-            throw new AssertException(errorMessage);
+            fail(errorMessage);
         }
     }
 
     public static void assertTrue(final boolean condition, final Supplier<String> errorMessageProvider) {
         if (!condition) {
-            throw new AssertException(errorMessageProvider.get());
+            fail(errorMessageProvider);
         }
     }
 
@@ -40,6 +48,10 @@ public class Assert {
 
     public static void assertNull(final Object object, final Supplier<String> errorMessageProvider) {
         assertTrue(object == null, errorMessageProvider);
+    }
+
+    private Assert() {
+        // no instance
     }
 
 }

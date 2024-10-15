@@ -4,8 +4,8 @@ consumers:
             - topic: user
               partition: 0
               offset: 333
-        output.file: users.yaml
-        messages.count: 2
+        output-file: users.yaml
+        messages-count: 2
         properties:
             auto.offset.reset: earliest
     user2-fetch:
@@ -14,25 +14,25 @@ consumers:
               partition: 0
               offset: 148
         output.file: users-2.yaml
-        messages.count: 2
+        messages-count: 2
 producers:
     user-generate:
         topic: user
         log.file: user-generate.log
-        messages.count: 200
+        messages-count: 200
         generator.class: io.github.cyrilsochor.kafky.core.runtime.job.producer.RandomMessageGenerator
         generator.value.class: io.github.cyrilsochor.kafky.sample.avro.specific.model.User
         delay: 10
     user-push:
-        template.file: users.yaml
+        template-file: users.yaml
         topic: user-2
-        log.file: user-push.log
-        messages.count: 10000
+        log-file: user-push.log
+        messages-count: 10000
 global:
     bootstrap.servers: localhost:9092
     apicurio.registry.url: http://localhost:7777
 global.consumers:
-global.producers:
+global-.producers:
     apicurio.registry.find-latest: true
     apicurio.registry.auto-register: true
 report:

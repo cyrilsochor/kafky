@@ -1,0 +1,4 @@
+allprojects {
+	group = 'io.github.cyrilsochor.kafky'
+	version = '1.0'
+}

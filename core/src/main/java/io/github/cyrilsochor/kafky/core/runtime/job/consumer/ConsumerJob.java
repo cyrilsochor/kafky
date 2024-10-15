@@ -3,6 +3,7 @@ package io.github.cyrilsochor.kafky.core.runtime.job.consumer;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.stop;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertNull;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
+import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getNonEmptyListOfMaps;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getStringRequired;
 import static java.lang.String.format;
@@ -23,6 +24,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
@@ -38,21 +40,24 @@ public class ConsumerJob implements Job {
 
     public static ConsumerJob of(
             final String name,
-            final Properties properties) {
+            final Map<Object, Object> cfg) throws IOException {
         LOG.atDebug().setMessage("Consumer job {} properties:\n{}")
                 .addArgument(name)
-                .addArgument((Supplier<String>) () -> properties.entrySet().stream()
+                .addArgument((Supplier<String>) () -> cfg.entrySet().stream()
                         .map(e -> format("%s: %s", e.getKey(), e.getValue()))
                         .collect(joining("\n")))
                 .log();
 
-        final ConsumerJob job = new ConsumerJob(name, properties);
+        final ConsumerJob job = new ConsumerJob(name);
 
-        job.messagesCount = PropertiesUtils.getLong(properties, KafkyConsumerConfig.MESSAGES_COUNT);
+        job.kafkaConsumerProperties = new Properties();
+        job.kafkaConsumerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES));
+
+        job.messagesCount = PropertiesUtils.getLong(cfg, KafkyConsumerConfig.MESSAGES_COUNT);
 
         job.topics = new LinkedList<>();
         job.assignments = new LinkedList<>();
-        for (final Map<Object, Object> s : getNonEmptyListOfMaps(properties, KafkyConsumerConfig.SUBSCRIBES)) {
+        for (final Map<Object, Object> s : getNonEmptyListOfMaps(cfg, KafkyConsumerConfig.SUBSCRIBES)) {
             final String topic = getStringRequired(s, KafkyConsumerConfig.SUBSCRIBES_TOPIC);
             final Integer partition = PropertiesUtils.getInteger(s, KafkyConsumerConfig.SUBSCRIBES_PARTITION);
             final Long offset = PropertiesUtils.getLong(s, KafkyConsumerConfig.SUBSCRIBES_OFFSET);
@@ -66,7 +71,7 @@ public class ConsumerJob implements Job {
         assertTrue(job.topics.isEmpty() || job.assignments.isEmpty(), "Partition should be specified for all topics or for none");
 
         job.outputs = new LinkedList<>();
-        final Path outputPath = PropertiesUtils.getPathRequired(properties, KafkyConsumerConfig.OUTPUT_FILE);
+        final Path outputPath = PropertiesUtils.getPathRequired(cfg, KafkyConsumerConfig.OUTPUT_FILE);
         LOG.info("Writing {} consumed messages log to {}", job.getId(), outputPath.toAbsolutePath());
         job.outputs.add(new StorageSerializer(new TextWriter(outputPath)));
 
@@ -74,7 +79,7 @@ public class ConsumerJob implements Job {
     }
 
     protected final String name;
-    protected final Properties properties;
+    protected Properties kafkaConsumerProperties;
 
     protected List<String> topics;
     protected List<Assigment> assignments;
@@ -87,9 +92,8 @@ public class ConsumerJob implements Job {
 
     protected long consumedMessagesCount;
 
-    public ConsumerJob(final String name, final Properties properties) {
+    public ConsumerJob(final String name) {
         this.name = name;
-        this.properties = properties;
     }
 
     @Override
@@ -104,7 +108,7 @@ public class ConsumerJob implements Job {
 
     @Override
     public IterationResult start() throws Exception {
-        consumer = new KafkaConsumer<>(properties);
+        consumer = new KafkaConsumer<>(kafkaConsumerProperties);
 
         if (isNotEmpty(topics)) {
             consumer.subscribe(topics);
@@ -115,9 +119,7 @@ public class ConsumerJob implements Job {
                     .toList());
             assignments.stream()
                     .filter(ass -> ass.offset != null)
-                    .forEach(ass -> {
-                        consumer.seek(ass.topicPartition, ass.offset);
-                    });
+                    .forEach(ass -> consumer.seek(ass.topicPartition, ass.offset));
         }
 
         for (Consumer<ConsumerRecord<?, ?>> o : outputs) {
@@ -132,9 +134,9 @@ public class ConsumerJob implements Job {
         long iteraationStartConsumedMessageCount = consumedMessagesCount;
 
         final ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.of(1000, ChronoUnit.MILLIS));
-        for (final ConsumerRecord<byte[], byte[]> record : records) {
+        for (final ConsumerRecord<byte[], byte[]> rec : records) {
             if (messagesCount == null || consumedMessagesCount < messagesCount) {
-                output(record);
+                output(rec);
                 consumedMessagesCount++;
             }
         }
@@ -145,9 +147,9 @@ public class ConsumerJob implements Job {
                 0);
     }
 
-    protected void output(final ConsumerRecord<?, ?> record) throws Exception {
+    protected void output(final ConsumerRecord<?, ?> rec) throws Exception {
         for (Consumer<ConsumerRecord<?, ?>> o : outputs) {
-            o.consume(record);
+            o.consume(rec);
         }
     }
 
@@ -162,9 +164,41 @@ public class ConsumerJob implements Job {
         }
     }
 
-    protected record Assigment(
+    @Override
+    public String getInfo() {
+        final StringBuilder info = new StringBuilder();
+
+        if (isNotEmpty(topics)) {
+            appendFieldValue(info, "topics", topics.stream().collect(joining(", ")));
+        }
+
+        if (isNotEmpty(assignments)) {
+            appendFieldValue(info, "assigments", assignments.stream()
+                    .map(ass -> {
+                        final StringBuilder b = new StringBuilder();
+                        b.append(ass.topicPartition.topic());
+                        b.append(":");
+                        b.append(ass.topicPartition);
+                        if (ass.offset != null) {
+                            b.append(":");
+                            b.append(ass.offset);
+                        }
+                        return b.toString();
+                    })
+                    .collect(joining(", ")));
+        }
+
+        if (messagesCount != null) {
+            appendFieldValue(info, "messages-count", messagesCount);
+        }
+
+        return info.toString();
+    }
+
+    protected static record Assigment(
             TopicPartition topicPartition,
             Long offset) {
 
     }
+
 }

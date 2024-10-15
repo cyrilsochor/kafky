@@ -10,17 +10,16 @@ import java.util.Set;
 public class KafkyDefaults {
 
     public static final Map<Object, Object> DEFAULT_CONSUMER_PROPERTIES = Map.of(
-            "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer",
-            "value.deserializer", "io.apicurio.registry.serde.avro.AvroKafkaDeserializer",
-            //            "value.deserializer","org.apache.kafka.common.serialization.ByteArrayDeserializer",
-            "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true));
+            KafkyConsumerConfig.PROPERITES, Map.of(
+                    "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer",
+                    "value.deserializer", "io.apicurio.registry.serde.avro.AvroKafkaDeserializer",
+                    "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true)));
 
     public static final Map<Object, Object> DEFAULT_PRODUCER_PROPERTIES = Map.of(
-            "key.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer",
-            "value.serializer", "io.apicurio.registry.serde.avro.AvroKafkaSerializer",
-            // "value.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer",
-            KafkyProducerConfig.RECORD_PRODUCERS_PACKAGE,
-            List.of(TemplateRecordProducer.class.getPackage().getName()));
+            KafkyProducerConfig.RECORD_PRODUCERS_PACKAGE, List.of(TemplateRecordProducer.class.getPackage().getName()),
+            KafkyProducerConfig.PROPERITES, Map.of(
+                    "key.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer",
+                    "value.serializer", "io.apicurio.registry.serde.avro.AvroKafkaSerializer"));
 
     public static final Set<String> TRANSPORT_HEADERS = Set.of(
             "apicurio.value.globalId",
@@ -29,8 +28,7 @@ public class KafkyDefaults {
     public static final Map<Object, Object> DEFAULT_REPORT_PROPERTIES = Map.of(
             KafkyReportConfig.JOBS_STATUS_PERIOD, 10_000,
             KafkyReportConfig.SYSTEM_OUT, true,
-            KafkyReportConfig.LOG, true
-    );
+            KafkyReportConfig.LOG, true);
 
     private KafkyDefaults() {
         // no instance

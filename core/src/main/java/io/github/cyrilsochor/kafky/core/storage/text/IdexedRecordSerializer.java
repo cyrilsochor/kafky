@@ -1,5 +1,7 @@
 package io.github.cyrilsochor.kafky.core.storage.text;
 
+import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
+
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -12,7 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collection;
+import java.util.List;
 
 @SuppressWarnings("unchecked")
 public class IdexedRecordSerializer extends JsonSerializer<IndexedRecord> {
@@ -24,6 +28,8 @@ public class IdexedRecordSerializer extends JsonSerializer<IndexedRecord> {
             final IndexedRecord value,
             final JsonGenerator gen,
             final SerializerProvider serializers) throws IOException {
+        LOG.trace("Start serialize {}", value);
+
         gen.writeStartObject();
         gen.writeObjectFieldStart(AVROConstants.RECORD);
 
@@ -38,16 +44,18 @@ public class IdexedRecordSerializer extends JsonSerializer<IndexedRecord> {
 
         gen.writeEndObject();
         gen.writeEndObject();
+
+        LOG.trace("Finish serialize {}", value);
     }
 
-    protected void writeData(final IndexedRecord record, final JsonGenerator gen) throws IOException {
-        final Schema schema = record.getSchema();
+    protected void writeData(final IndexedRecord rec, final JsonGenerator gen) throws IOException {
+        final Schema schema = rec.getSchema();
         for (Field field : schema.getFields()) {
-            writeField(field, record.get(field.pos()), gen);
+            writeField(field, rec.get(field.pos()), gen);
         }
     }
 
-    private void writeField(final Field field, final Object value, final JsonGenerator gen) throws IOException {
+    protected void writeField(final Field field, final Object value, final JsonGenerator gen) throws IOException {
         final String name = field.name();
         final Schema schema = field.schema();
         final Type type = schema.getType();
@@ -58,39 +66,73 @@ public class IdexedRecordSerializer extends JsonSerializer<IndexedRecord> {
         case FLOAT -> gen.writeNumberField(name, ((Number) value).floatValue());
         case DOUBLE -> gen.writeNumberField(name, ((Number) value).doubleValue());
         case BOOLEAN -> gen.writeBooleanField(name, (Boolean) value);
-        case BYTES -> gen.writeBinaryField(name, (byte[]) value);
+        case BYTES -> {
+            if (value instanceof byte[] ba) {
+                gen.writeBinaryField(name, ba);
+            } else if (value instanceof ByteBuffer bb) {
+                gen.writeBinaryField(name, bb.array());
+            } else {
+                LOG.warn("Nonimplemented type {} with value class {} of field {}", type, value.getClass().getName(), name);
+            }
+        }
         case ENUM -> gen.writeStringField(name, ((GenericData.EnumSymbol) value).toString());
         case UNION -> {
-            if (value != null) {
+            if (value == null) {
+                // do nothing
+            } else if (value instanceof IndexedRecord ir) {
+                gen.writeObjectFieldStart(name);
+                writeData(ir, gen);
+                gen.writeEndObject();
+            } else if (value instanceof GenericData.Array array) {
+                final List<Schema> nonNullSchemas = schema.getTypes().stream()
+                        .filter(s -> s.getType() != Type.NULL)
+                        .toList();
+                assertTrue(nonNullSchemas.size() == 1, "Expected exactly one non-null schema of filed " + name);
+                final Schema unionSchema = nonNullSchemas.get(0);
+                final Schema elementSchema = unionSchema.getElementType();
+                final Type elementType = elementSchema.getType();
+                writeArray(gen, name, type, elementType, array);
+            } else {
                 gen.writePOJOField(name, value);
             }
         }
+        case RECORD -> {
+            gen.writeObjectFieldStart(name);
+            writeData((IndexedRecord) value, gen);
+            gen.writeEndObject();
+        }
         case ARRAY -> {
-            gen.writeArrayFieldStart(name);
-
             final Schema elementSchema = schema.getElementType();
             final Type elementType = elementSchema.getType();
-            final Collection<Object> collection = (Collection<Object>) value;
-            for (Object element : collection) {
-                switch (elementType) {
-                case STRING -> gen.writeString((String) element);
-                case INT -> gen.writeNumber(((Number) element).intValue());
-                case LONG -> gen.writeNumber(((Number) element).longValue());
-                case FLOAT -> gen.writeNumber(((Number) element).floatValue());
-                case DOUBLE -> gen.writeNumber(((Number) element).doubleValue());
-                case RECORD -> {
-                    gen.writeStartObject();
-                    writeData((IndexedRecord) element, gen);
-                    gen.writeEndObject();
-                }
-                default -> LOG.warn("Nonimplemented {} element type {} of field {}", type, elementType, name);
-                }
-            }
-
-            gen.writeEndArray();
+            writeArray(gen, name, type, elementType, (Collection<Object>) value);
         }
-        default -> 
-                LOG.warn("Nonimplemented type {} of field {}", type, name);
+        default -> LOG.warn("Nonimplemented type {} with value class {} of field {}", type, value.getClass().getName(), name);
+        }
+    }
+
+    protected void writeArray(final JsonGenerator gen, final String name, final Type type, final Type elementType,
+            final Collection<Object> collection) throws IOException {
+        gen.writeArrayFieldStart(name);
+        for (Object element : collection) {
+            writeArrayElement(gen, name, type, elementType, element);
+        }
+        gen.writeEndArray();
+    }
+
+    protected void writeArrayElement(final JsonGenerator gen, final String name, final Type type, final Type elementType, Object element)
+            throws IOException {
+        switch (elementType) {
+        case STRING -> gen.writeString((String) element);
+        case INT -> gen.writeNumber(((Number) element).intValue());
+        case LONG -> gen.writeNumber(((Number) element).longValue());
+        case FLOAT -> gen.writeNumber(((Number) element).floatValue());
+        case DOUBLE -> gen.writeNumber(((Number) element).doubleValue());
+        case RECORD -> {
+            gen.writeStartObject();
+            writeData((IndexedRecord) element, gen);
+            gen.writeEndObject();
+        }
+        default -> LOG.warn("Nonimplemented {} element type {} of field {}", type, elementType, name);
         }
     }
 

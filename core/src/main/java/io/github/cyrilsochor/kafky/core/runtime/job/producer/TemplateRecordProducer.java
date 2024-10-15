@@ -18,15 +18,14 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Properties;
-import java.util.Set;
+import java.util.Map;
 
 public class TemplateRecordProducer implements RecordProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(TemplateRecordProducer.class);
 
-    public static RecordProducer of(final Properties properties) throws Exception {
-        final Path templatePath = PropertiesUtils.getPath(properties, KafkyProducerConfig.INPUT_PATH);
+    public static RecordProducer of(final Map<Object, Object> cfg) throws Exception {
+        final Path templatePath = PropertiesUtils.getPath(cfg, KafkyProducerConfig.INPUT_PATH);
         if (templatePath == null) {
             return null;
         }
@@ -75,6 +74,7 @@ public class TemplateRecordProducer implements RecordProducer {
         return producerRecord;
     }
 
+    @SuppressWarnings("java:S1452")
     protected ConsumerRecord<?, ?> nextTemplate() throws Exception {
         if (lastTemplateIndex < 0) {
             final ConsumerRecord<?, ?> template = templateProducer.produce();

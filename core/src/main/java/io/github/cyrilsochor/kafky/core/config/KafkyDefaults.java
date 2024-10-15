@@ -1,6 +1,7 @@
 package io.github.cyrilsochor.kafky.core.config;
 
 import io.github.cyrilsochor.kafky.core.expression.funtion.NewB3Function;
+import io.github.cyrilsochor.kafky.core.expression.funtion.RandomLongFunction;
 import io.github.cyrilsochor.kafky.core.expression.funtion.RandomUUIDFunction;
 import io.github.cyrilsochor.kafky.core.expression.funtion.SizeFunction;
 import io.github.cyrilsochor.kafky.core.runtime.job.consumer.StorageRecordConsumer;
@@ -25,6 +26,7 @@ public class KafkyDefaults {
                     "key.serializer", "org.apache.kafka.common.serialization.StringSerializer"),
             KafkyProducerConfig.EXPRESSION_FUNCTIONS, Map.of(
                     "RANDOM_UUID", RandomUUIDFunction.class.getName(),
+                    "RANDOM_LONG", RandomLongFunction.class.getName(),
                     "SIZE", SizeFunction.class.getName(),
                     "NEW_B3", NewB3Function.class.getName()));
 

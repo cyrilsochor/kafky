@@ -4,7 +4,7 @@ producers:
         log.file: user-generate.log
         messages.count: 2
         generator.class: io.github.cyrilsochor.kafky.core.runtime.job.producer.RandomMessageGenerator
-        generator.value.class: com.example.avro.User
+        generator.value.class: io.github.cyrilsochor.kafky.sample.avro.specific.model.User
 global.producers:
     apicurio.registry.find-latest: true
     apicurio.registry.auto-register: true

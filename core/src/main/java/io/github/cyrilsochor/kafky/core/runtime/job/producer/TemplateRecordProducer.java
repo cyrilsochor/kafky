@@ -2,11 +2,12 @@ package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertFalse;
 
+import io.github.cyrilsochor.kafky.api.job.Producer;
+import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.storage.mapper.StorageDeserializer;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
 import io.github.cyrilsochor.kafky.core.storage.text.TextReader;
-import io.github.cyrilsochor.kafky.core.util.Producer;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;

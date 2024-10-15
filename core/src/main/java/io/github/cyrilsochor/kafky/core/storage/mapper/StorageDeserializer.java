@@ -3,11 +3,11 @@ package io.github.cyrilsochor.kafky.core.storage.mapper;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
 import static java.lang.String.format;
 
+import io.github.cyrilsochor.kafky.api.job.Producer;
 import io.github.cyrilsochor.kafky.core.exception.InvalidSchemaException;
 import io.github.cyrilsochor.kafky.core.storage.model.Header;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
 import io.github.cyrilsochor.kafky.core.storage.text.AVROConstants;
-import io.github.cyrilsochor.kafky.core.util.Producer;
 import org.apache.avro.Schema;
 import org.apache.avro.Schema.Field;
 import org.apache.avro.Schema.Type;

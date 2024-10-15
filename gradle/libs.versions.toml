@@ -13,4 +13,5 @@ commons-collections4    = { module="org.apache.commons:commons-collections4",   
 kafka-clients           = { module="org.apache.kafka:kafka-clients",                           version="3.8.0"  }
 apicurio-registry-serdes-avro-serde={ module="io.apicurio:apicurio-registry-serdes-avro-serde",version="2.6.3.Final"}
 reflections             = { module="org.reflections:reflections",                              version="0.9.12" }
+junit-platform-launcher = { module="org.junit.platform:junit-platform-launcher",               version="1.11.0" }
 

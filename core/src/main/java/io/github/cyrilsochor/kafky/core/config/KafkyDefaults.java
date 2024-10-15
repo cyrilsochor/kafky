@@ -1,6 +1,6 @@
 package io.github.cyrilsochor.kafky.core.config;
 
-import io.github.cyrilsochor.kafky.core.runtime.job.producer.RecordProducer;
+import io.github.cyrilsochor.kafky.core.runtime.job.producer.TemplateRecordProducer;
 import org.apache.commons.lang3.RandomStringUtils;
 
 import java.util.List;
@@ -10,18 +10,17 @@ import java.util.Set;
 public class KafkyDefaults {
 
     public static final Map<Object, Object> DEFAULT_CONSUMER_PROPERTIES = Map.of(
-            "key.deserializer","org.apache.kafka.common.serialization.StringDeserializer",
-            "value.deserializer","io.apicurio.registry.serde.avro.AvroKafkaDeserializer",
+            "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer",
+            "value.deserializer", "io.apicurio.registry.serde.avro.AvroKafkaDeserializer",
             //            "value.deserializer","org.apache.kafka.common.serialization.ByteArrayDeserializer",
-            "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true)
-            );
+            "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true));
 
-            public static final Map<Object, Object> DEFAULT_PRODUCER_PROPERTIES = Map.of(
+    public static final Map<Object, Object> DEFAULT_PRODUCER_PROPERTIES = Map.of(
             "key.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer",
             "value.serializer", "io.apicurio.registry.serde.avro.AvroKafkaSerializer",
             // "value.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer",
-            KafkyProducerConfig.RECORD_PRODUCERS_PACKAGE, List.of(RecordProducer.class.getPackage().getName())
-    );
+            KafkyProducerConfig.RECORD_PRODUCERS_PACKAGE,
+            List.of(TemplateRecordProducer.class.getPackage().getName()));
 
     public static final Set<String> TRANSPORT_HEADERS = Set.of(
             "apicurio.value.globalId",

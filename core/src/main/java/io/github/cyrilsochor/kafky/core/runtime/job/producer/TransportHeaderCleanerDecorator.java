@@ -1,5 +1,8 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 
+import io.github.cyrilsochor.kafky.api.job.producer.AbstractRecordDecorator;
+import io.github.cyrilsochor.kafky.api.job.producer.RecordDecorator;
+import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Headers;

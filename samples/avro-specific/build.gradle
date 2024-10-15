@@ -1,11 +1,11 @@
 plugins {
     id 'buildlogic.java-application-conventions'
+    id "com.bakdata.avro" version "1.4.0"
 }
 
 dependencies {
-    implementation project(':core')
-
-    runtimeOnly libs.logback.classic
+    implementation project(':application')
+    implementation libs.apicurio.registry.serdes.avro.serde
 }
 
 application {

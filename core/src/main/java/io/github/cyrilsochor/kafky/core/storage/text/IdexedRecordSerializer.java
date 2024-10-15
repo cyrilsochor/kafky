@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collection;
 
+@SuppressWarnings("unchecked")
 public class IdexedRecordSerializer extends JsonSerializer<IndexedRecord> {
 
     private static final Logger LOG = LoggerFactory.getLogger(IdexedRecordSerializer.class);

@@ -6,3 +6,5 @@ plugins {
 rootProject.name = 'kafky'
 include('application')
 include('core')
+include('api')
+include('samples:avro-specific')

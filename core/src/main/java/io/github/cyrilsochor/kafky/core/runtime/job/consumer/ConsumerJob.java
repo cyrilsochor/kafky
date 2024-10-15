@@ -9,12 +9,12 @@ import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 
+import io.github.cyrilsochor.kafky.api.job.Consumer;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
 import io.github.cyrilsochor.kafky.core.storage.mapper.StorageSerializer;
 import io.github.cyrilsochor.kafky.core.storage.text.TextWriter;
-import io.github.cyrilsochor.kafky.core.util.Consumer;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.function.BiFunction;
 
+@SuppressWarnings("unchecked")
 public class PropertiesUtils {
 
     private PropertiesUtils() {

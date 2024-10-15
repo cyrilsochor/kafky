@@ -1,4 +1,4 @@
-package io.github.cyrilsochor.kafky.core.runtime.job.producer;
+package io.github.cyrilsochor.kafky.api.job.producer;
 
 public interface RecordDecorator extends RecordProducer {
 

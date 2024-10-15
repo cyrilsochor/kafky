@@ -13,6 +13,8 @@ import static java.util.concurrent.locks.LockSupport.parkNanos;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toCollection;
 
+import io.github.cyrilsochor.kafky.api.job.producer.RecordDecorator;
+import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.exception.InvalidConfigurationException;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;

@@ -1,4 +1,4 @@
-package io.github.cyrilsochor.kafky.core.runtime.job.producer;
+package io.github.cyrilsochor.kafky.api.job.producer;
 
 import org.apache.kafka.clients.producer.ProducerRecord;
 
@@ -6,7 +6,7 @@ public abstract class AbstractRecordDecorator implements RecordDecorator {
 
     protected RecordProducer nextProducer;
 
-    abstract ProducerRecord<Object, Object> decorate(ProducerRecord<Object, Object> source) throws Exception;
+    protected abstract ProducerRecord<Object, Object> decorate(ProducerRecord<Object, Object> source) throws Exception;
 
     @Override
     public void setNextProducer(RecordProducer nextProducer) {

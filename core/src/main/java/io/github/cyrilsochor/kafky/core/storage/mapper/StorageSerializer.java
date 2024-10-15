@@ -2,9 +2,9 @@ package io.github.cyrilsochor.kafky.core.storage.mapper;
 
 import static java.util.Collections.singletonList;
 
+import io.github.cyrilsochor.kafky.api.job.Consumer;
 import io.github.cyrilsochor.kafky.core.storage.model.Header;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
-import io.github.cyrilsochor.kafky.core.util.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Headers;
 

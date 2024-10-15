@@ -4,9 +4,9 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cyrilsochor.kafky.api.job.Producer;
 import io.github.cyrilsochor.kafky.core.serde.Serdes;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
-import io.github.cyrilsochor.kafky.core.util.Producer;
 
 import java.io.Reader;
 import java.nio.file.Files;

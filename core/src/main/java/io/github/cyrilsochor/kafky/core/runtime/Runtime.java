@@ -30,6 +30,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("unchecked")
 public class Runtime {
 
     private static final Logger LOG = LoggerFactory.getLogger(Runtime.class);

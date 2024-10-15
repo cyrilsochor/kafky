@@ -1,4 +1,4 @@
-package io.github.cyrilsochor.kafky.core.util;
+package io.github.cyrilsochor.kafky.api.job;
 
 public interface Consumer<V> {
 

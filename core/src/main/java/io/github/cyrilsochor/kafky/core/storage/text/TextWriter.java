@@ -1,9 +1,9 @@
 package io.github.cyrilsochor.kafky.core.storage.text;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cyrilsochor.kafky.api.job.Consumer;
 import io.github.cyrilsochor.kafky.core.serde.Serdes;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
-import io.github.cyrilsochor.kafky.core.util.Consumer;
 
 import java.io.Writer;
 import java.nio.file.Files;

@@ -10,9 +10,7 @@ dependencies {
     constraints {
     }
 
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.3'
-
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly libs.junit.platform.launcher
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
@@ -24,4 +22,8 @@ java {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs += ['-Xlint:unchecked']
 }

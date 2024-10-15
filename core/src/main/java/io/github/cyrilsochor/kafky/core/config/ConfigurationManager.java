@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Map.Entry;
 
+@SuppressWarnings("unchecked")
 public class ConfigurationManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfigurationManager.class);

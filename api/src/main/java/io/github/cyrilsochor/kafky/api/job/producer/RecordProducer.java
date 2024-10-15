@@ -1,6 +1,6 @@
-package io.github.cyrilsochor.kafky.core.runtime.job.producer;
+package io.github.cyrilsochor.kafky.api.job.producer;
 
-import io.github.cyrilsochor.kafky.core.util.Producer;
+import io.github.cyrilsochor.kafky.api.job.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
 public interface RecordProducer extends Producer<ProducerRecord<Object, Object>> {

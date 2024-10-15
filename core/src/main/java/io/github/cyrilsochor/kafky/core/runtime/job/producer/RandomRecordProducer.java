@@ -3,6 +3,7 @@ package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
+import io.github.cyrilsochor.kafky.api.job.producer.AbstractRecordProducer;
 import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.exception.RandomMessageGeneratorException;
@@ -26,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-public class RandomRecordProducer implements RecordProducer {
+public class RandomRecordProducer extends AbstractRecordProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(RandomRecordProducer.class);
 

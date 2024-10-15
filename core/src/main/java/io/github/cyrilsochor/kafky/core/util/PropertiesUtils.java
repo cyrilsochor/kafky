@@ -11,17 +11,20 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.function.BiFunction;
+import java.util.regex.Pattern;
 
 @SuppressWarnings({
         "unchecked",
         "java:S3740",
 })
 public class PropertiesUtils {
+
+    protected static final Pattern PATH_SUFFIX_PATTERN = Pattern.compile("(\\.[^.]*$)");
 
     private PropertiesUtils() {
         // no instance
@@ -47,8 +50,16 @@ public class PropertiesUtils {
     }
 
     private static <V> V get(final Map<Object, Object> properties, final String key, BiFunction<String, Object, V> parser) {
+        return getOrElse(properties, key, parser, null);
+    }
+
+    private static <V> V getOrElse(Map<Object, Object> properties, String key, BiFunction<String, Object, V> parser, V elseValue) {
         final Object value = properties.get(key);
-        return value == null ? null : parser.apply(key, value);
+        if (value == null) {
+            return elseValue;
+        } else {
+            return parser.apply(key, value);
+        }
     }
 
     private static <V> V getRequired(final Map<Object, Object> properties, final String key, BiFunction<String, Object, V> parser) {
@@ -141,22 +152,35 @@ public class PropertiesUtils {
 
     /* Path */
 
-    private static Path parsePath(final String key, final Object value) {
+    private static Path parsePath(final String key, final Object value, final String suffix) {
         if (value instanceof Path path) {
             return path;
         } else if (value instanceof String string) {
-            return Path.of(string);
+            final String fp = suffix == null ? string : appendPathSuffix(string, suffix);
+            return Path.of(fp);
         } else {
             throw new InvalidPropertyType(key, value.getClass(), Path.class, String.class);
         }
     }
 
+    protected static String appendPathSuffix(final String path, final String suffix) {
+        return PATH_SUFFIX_PATTERN.matcher(path).replaceAll(suffix + "$1");
+    }
+
     public static Path getPathRequired(final Map<Object, Object> properties, final String key) {
-        return getRequired(properties, key, PropertiesUtils::parsePath);
+        return getPathRequired(properties, key, null);
+    }
+
+    public static Path getPathRequired(final Map<Object, Object> properties, final String key, final String suffixKey) {
+        return getRequired(properties, key, (t, u) -> parsePath(t, u, getString(properties, suffixKey)));
     }
 
     public static Path getPath(final Map<Object, Object> properties, final String key) {
-        return get(properties, key, PropertiesUtils::parsePath);
+        return getPath(properties, key, null);
+    }
+
+    public static Path getPath(final Map<Object, Object> properties, final String key, final String suffixKey) {
+        return get(properties, key, (t, u) -> parsePath(t, u, getString(properties, suffixKey)));
     }
 
     /* Duration */
@@ -189,6 +213,10 @@ public class PropertiesUtils {
         } else {
             throw new InvalidPropertyType(key, value.getClass(), List.class);
         }
+    }
+
+    public static List<String> getListOfStrings(final Map<Object, Object> properties, final String key) {
+        return getOrElse(properties, key, PropertiesUtils::parseListOfStrings, Collections.emptyList());
     }
 
     public static List<String> getNonEmptyListOfStrings(final Map<Object, Object> properties, final String key) {
@@ -270,7 +298,7 @@ public class PropertiesUtils {
 
     private static <T> T createInstance(final Map<Object, Object> properties, final Class<? extends T> valueClass)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-        final Constructor<? extends T> constructor = valueClass.getConstructor(Properties.class);
+        final Constructor<? extends T> constructor = valueClass.getConstructor(Map.class);
         return constructor.newInstance(properties);
     }
 

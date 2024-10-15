@@ -22,7 +22,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
+public class StorageDeserializer implements Producer<ConsumerRecord<Object, Object>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StorageDeserializer.class);
 
@@ -38,7 +38,7 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
     }
 
     @Override
-    public ConsumerRecord<?, ?> produce() throws Exception {
+    public ConsumerRecord<Object, Object> produce() throws Exception {
         final Message message = producer.produce();
 
         if (message == null) {
@@ -54,7 +54,7 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
         } else if (orgKey instanceof byte[] b) {
             newKey = b;
         } else {
-            newKey = orgKey.toString().getBytes();
+            newKey = orgKey.toString();
         }
 
         final Object orgValue = message.value();
@@ -114,19 +114,19 @@ public class StorageDeserializer implements Producer<ConsumerRecord<?, ?>> {
     protected Object valueFromTemplate(final Object source, final Schema schema) {
         final String name = schema.getName();
         final Type type = schema.getType();
-        LOG.trace("Fill name {}, type {}: {}", name, type, source);
+        LOG.trace("Fill schema name {}, type {}, value: {}", name, type, source);
 
         return switch (type) {
         case INT -> ((Number) source).intValue();
         case LONG -> ((Number) source).longValue();
         case FLOAT -> ((Number) source).floatValue();
         case DOUBLE -> ((Number) source).doubleValue();
-        case STRING -> source;
+        case STRING -> source.toString();
         case BOOLEAN -> source;
         case BYTES -> source;
         case ENUM -> new GenericData.EnumSymbol(schema, source);
         case UNION -> {
-            LOG.trace("{} types: {}", type, schema.getTypes());
+            LOG.trace("Fill {} with possible types: {}", type, schema.getTypes());
             final List<Schema> possibleSchemas = new LinkedList<>();
             for (Schema unionSchema : schema.getTypes()) {
                 if (unionSchema.getType() == Type.NULL) {

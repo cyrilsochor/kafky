@@ -1,19 +1,22 @@
 package io.github.cyrilsochor.kafky.core.report;
 
 import static java.lang.String.format;
+import static org.apache.commons.lang3.StringUtils.isEmpty;
 
 import io.github.cyrilsochor.kafky.core.config.KafkyReportConfig;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Properties;
 import java.util.function.Supplier;
 
 public class Report {
 
     private static final Logger LOG = LoggerFactory.getLogger(Report.class);
+    protected static final DateTimeFormatter CONSOLE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public static Report of(Properties cfg) {
         return new Report(
@@ -39,6 +42,7 @@ public class Report {
         return jobsStatusPeriod;
     }
 
+    @SuppressWarnings("java:S106")
     protected void displayReport(final Supplier<String> messageSupplier, final Throwable throwable) {
         if (!toSystemOut && !toLog) {
             return;
@@ -47,14 +51,22 @@ public class Report {
         final String message = messageSupplier.get();
 
         if (toSystemOut) {
-            if (throwable == null) {
-                System.out.println(message);
-            } else {
+            final StringBuilder consoleText = new StringBuilder();
+            consoleText.append(CONSOLE_TIMESTAMP_FORMATTER.format(LocalDateTime.now()));
+            consoleText.append(" ");
+            consoleText.append(message);
+
+            if (throwable != null) {
                 final String throableMessage = throwable.getMessage();
-                System.out.println(message
-                        + ", throwable " + throwable.getClass().getName()
-                        + (StringUtils.isEmpty(throableMessage) ? "" : ": " + throableMessage));
+                consoleText.append(", throwable ");
+                consoleText.append(throwable.getClass().getName());
+                if (isEmpty(throableMessage)) {
+                    consoleText.append(": ");
+                    consoleText.append(throableMessage);
+                }
             }
+
+            System.out.println(consoleText.toString());
         }
 
         if (toLog) {

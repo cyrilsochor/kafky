@@ -1,8 +1,10 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.consumer;
 
+import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.go;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.stop;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertNull;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
+import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldKey;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getNonEmptyListOfMaps;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getStringRequired;
@@ -10,12 +12,13 @@ import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 
-import io.github.cyrilsochor.kafky.api.job.Consumer;
+import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
+import io.github.cyrilsochor.kafky.api.job.consumer.RecordConsumer;
+import io.github.cyrilsochor.kafky.api.job.consumer.StopCondition;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
-import io.github.cyrilsochor.kafky.core.storage.mapper.StorageSerializer;
-import io.github.cyrilsochor.kafky.core.storage.text.TextWriter;
+import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -25,22 +28,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Path;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
-public class ConsumerJob implements Job {
+public class ConsumerJob implements Job, ConsumerJobStatus {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsumerJob.class);
 
     public static ConsumerJob of(
             final String name,
-            final Map<Object, Object> cfg) throws IOException {
+            final Map<Object, Object> cfg) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException,
+            IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         LOG.atDebug().setMessage("Consumer job {} properties:\n{}")
                 .addArgument(name)
                 .addArgument((Supplier<String>) () -> cfg.entrySet().stream()
@@ -53,7 +58,24 @@ public class ConsumerJob implements Job {
         job.kafkaConsumerProperties = new Properties();
         job.kafkaConsumerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES));
 
-        job.messagesCount = PropertiesUtils.getLong(cfg, KafkyConsumerConfig.MESSAGES_COUNT);
+        final StopCondition customStopCondition = PropertiesUtils.getObjectInstance(
+                cfg,
+                StopCondition.class,
+                KafkyConsumerConfig.STOP_CONDITION);
+        if (customStopCondition != null) {
+            assertNull(job.stopCondition, "Stop condition is already defined");
+            job.stopCondition = customStopCondition;
+        }
+
+        final Long messagesCount = PropertiesUtils.getLong(cfg, KafkyConsumerConfig.MESSAGES_COUNT);
+        if (messagesCount != null) {
+            assertNull(job.stopCondition, "Stop condition is already defined");
+            job.stopCondition = new MessageCountStopCondition(messagesCount);
+        }
+
+        if (job.stopCondition == null) {
+            job.stopCondition = new NeverStopCondition();
+        }
 
         job.topics = new LinkedList<>();
         job.assignments = new LinkedList<>();
@@ -70,10 +92,12 @@ public class ConsumerJob implements Job {
         }
         assertTrue(job.topics.isEmpty() || job.assignments.isEmpty(), "Partition should be specified for all topics or for none");
 
-        job.outputs = new LinkedList<>();
-        final Path outputPath = PropertiesUtils.getPathRequired(cfg, KafkyConsumerConfig.OUTPUT_FILE);
-        LOG.info("Writing {} consumed messages log to {}", job.getId(), outputPath.toAbsolutePath());
-        job.outputs.add(new StorageSerializer(new TextWriter(outputPath)));
+        final List<String> consumersPackages = PropertiesUtils.getNonEmptyListOfStrings(cfg, KafkyConsumerConfig.RECORD_CONSUMERS_PACKAGES);
+        job.recordConsumer = ComponentUtils.findImplementationsChain(
+                "record consumer",
+                RecordConsumer.class,
+                consumersPackages,
+                cfg);
 
         return job;
     }
@@ -84,13 +108,15 @@ public class ConsumerJob implements Job {
     protected List<String> topics;
     protected List<Assigment> assignments;
 
-    protected KafkaConsumer<byte[], byte[]> consumer;
+    protected KafkaConsumer<Object, Object> consumer;
+    protected ConsumerRecords<Object, Object> records;
 
-    protected List<Consumer<ConsumerRecord<?, ?>>> outputs;
-
-    protected Long messagesCount;
+    protected RecordConsumer recordConsumer;
 
     protected long consumedMessagesCount;
+
+    protected Function<ConsumerJobStatus, Boolean> stopCondition;
+    protected long pollTimeout = 1000;
 
     public ConsumerJob(final String name) {
         this.name = name;
@@ -108,60 +134,85 @@ public class ConsumerJob implements Job {
 
     @Override
     public IterationResult start() throws Exception {
-        consumer = new KafkaConsumer<>(kafkaConsumerProperties);
+        if (consumer == null) {
 
-        if (isNotEmpty(topics)) {
-            consumer.subscribe(topics);
-        }
-        if (isNotEmpty(assignments)) {
-            consumer.assign(assignments.stream()
-                    .map(Assigment::topicPartition)
-                    .toList());
-            assignments.stream()
-                    .filter(ass -> ass.offset != null)
-                    .forEach(ass -> consumer.seek(ass.topicPartition, ass.offset));
+            consumer = new KafkaConsumer<>(kafkaConsumerProperties);
+
+            if (isNotEmpty(topics)) {
+                consumer.subscribe(topics);
+            }
+            if (isNotEmpty(assignments)) {
+                consumer.assign(assignments.stream()
+                        .map(Assigment::topicPartition)
+                        .toList());
+                assignments.stream()
+                        .filter(ass -> ass.offset != null)
+                        .forEach(ass -> consumer.seek(ass.topicPartition, ass.offset));
+            }
+
+            recordConsumer.init();
         }
 
-        for (Consumer<ConsumerRecord<?, ?>> o : outputs) {
-            o.init();
+        readRecords();
+
+        if (records != null && !records.isEmpty()) {
+            return stop();
         }
 
-        return stop();
+        if (!consumer.assignment().isEmpty()) {
+            return stop();
+        }
+
+        return go();
     }
 
     @Override
     public IterationResult run() throws Exception {
-        long iteraationStartConsumedMessageCount = consumedMessagesCount;
 
-        final ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.of(1000, ChronoUnit.MILLIS));
-        for (final ConsumerRecord<byte[], byte[]> rec : records) {
-            if (messagesCount == null || consumedMessagesCount < messagesCount) {
-                output(rec);
+        long iterationStartConsumedMessageCount = consumedMessagesCount;
+
+        readRecords();
+
+        boolean stop = false;
+        for (final ConsumerRecord<Object, Object> rec : records) {
+            if (!stop) {
+                recordConsumer.consume(rec);
                 consumedMessagesCount++;
             }
+            stop = stopCondition.apply(this);
         }
+        records = null;
 
         return IterationResult.of(
-                consumedMessagesCount >= messagesCount,
-                consumedMessagesCount - iteraationStartConsumedMessageCount,
+                stop,
+                consumedMessagesCount - iterationStartConsumedMessageCount,
                 0);
     }
 
-    protected void output(final ConsumerRecord<?, ?> rec) throws Exception {
-        for (Consumer<ConsumerRecord<?, ?>> o : outputs) {
-            o.consume(rec);
+    protected void readRecords() {
+        if (records == null || records.isEmpty()) {
+            LOG.atTrace()
+                    .setMessage("{} assigment: {}, group metadata: {}")
+                    .addArgument(this::getName)
+                    .addArgument(consumer::assignment)
+                    .addArgument(consumer::groupMetadata)
+                    .log();
+            records = consumer.poll(Duration.of(pollTimeout, ChronoUnit.MILLIS));
         }
     }
 
     @Override
     public void finish() throws Exception {
-        for (Consumer<ConsumerRecord<?, ?>> o : outputs) {
-            o.close();
-        }
+        recordConsumer.close();
 
         if (consumer != null) {
             consumer.close();
         }
+    }
+
+    @Override
+    public long getConsumedMessagesCount() {
+        return consumedMessagesCount;
     }
 
     @Override
@@ -188,8 +239,16 @@ public class ConsumerJob implements Job {
                     .collect(joining(", ")));
         }
 
-        if (messagesCount != null) {
-            appendFieldValue(info, "messages-count", messagesCount);
+        RecordConsumer c = recordConsumer;
+        for (int pi = 0; c != null; pi++) {
+            if (pi == 0) {
+                appendFieldKey(info, "message-consumers");
+            } else {
+                info.append(", ");
+            }
+            info.append(c.getComponentInfo());
+
+            c = c.getChainNext();
         }
 
         return info.toString();

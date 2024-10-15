@@ -1,8 +1,9 @@
 package io.github.cyrilsochor.kafky.core.runtime;
 
-import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_CONSUMER_PROPERTIES;
-import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_PRODUCER_PROPERTIES;
+import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_CONSUMER_CONFIGURATION;
+import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_PRODUCER_CONFIGURATION;
 import static io.github.cyrilsochor.kafky.core.runtime.JobState.CANCELING;
+import static io.github.cyrilsochor.kafky.core.runtime.JobState.INITIALIZING;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.addProperties;
 import static java.lang.String.format;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -42,8 +44,8 @@ public class Runtime {
 
                 int cancelingCount = 0;
                 for (final JobThread thread : threads) {
-                    if (!thread.jobState.isFinite()) {
-                        thread.jobState = CANCELING;
+                    if (!thread.getJobState().isFinite()) {
+                        thread.setJobState(CANCELING);
                         cancelingCount++;
                     }
                 }
@@ -64,6 +66,8 @@ public class Runtime {
     }
 
     protected final List<JobThread> threads = new LinkedList<>();
+    protected JobState minJobState = INITIALIZING;
+    protected AtomicLong minJobStateCounter = new AtomicLong();
     protected Report report;
     protected Integer exitStatus;
     protected Instant start = Instant.now();
@@ -99,20 +103,20 @@ public class Runtime {
             final Map<Object, Object> jobCfg = new HashMap<>((Map<Object, Object>) consumerEntry.getValue());
             addProperties(jobCfg, cfg.globalConsumers());
             addProperties(jobCfg, cfg.global());
-            addProperties(jobCfg, DEFAULT_CONSUMER_PROPERTIES);
+            addProperties(jobCfg, DEFAULT_CONSUMER_CONFIGURATION);
             jobs.add(ConsumerJob.of((String) consumerEntry.getKey(), jobCfg));
         }
 
         for (final Map.Entry<Object, Object> producerEntry : cfg.producers().entrySet()) {
-            final Map<Object, Object>  jobCfg = new HashMap<>((Map<Object, Object>) producerEntry.getValue());
+            final Map<Object, Object> jobCfg = new HashMap<>((Map<Object, Object>) producerEntry.getValue());
             addProperties(jobCfg, cfg.globalProducers());
             addProperties(jobCfg, cfg.global());
-            addProperties(jobCfg, DEFAULT_PRODUCER_PROPERTIES);
+            addProperties(jobCfg, DEFAULT_PRODUCER_CONFIGURATION);
             jobs.add(ProducerJob.of((String) producerEntry.getKey(), jobCfg));
         }
 
         for (final Job job : jobs) {
-            threads.add(JobThread.of(job, report));
+            threads.add(JobThread.of(this, job));
         }
     }
 
@@ -130,7 +134,7 @@ public class Runtime {
 
         for (final JobThread thread : threads) {
             Function<? super JobState, ? extends AtomicLong> x = s -> new AtomicLong(0);
-            threadCountByState.computeIfAbsent(thread.jobState, x).incrementAndGet();
+            threadCountByState.computeIfAbsent(thread.getJobState(), x).incrementAndGet();
             consumedMessagesCount += thread.jobStatistics.getConsumedMessagesCount();
             producedMessagesCount += thread.jobStatistics.getProducedMessagesCount();
         }
@@ -143,23 +147,27 @@ public class Runtime {
                 producedMessagesCount);
     }
 
+    public Report getReport() {
+        return report;
+    }
+
     protected void waitJobs(final KafkyConfiguration cfg) {
+        final long jobsStatusPeriod = report.getJobsStatusPeriod();
         while (true) {
-            long timeout = report.getJobsStatusPeriod();
+            long iterationStart = System.currentTimeMillis();
 
             boolean allFinite = true;
             for (final JobThread thread : threads) {
-                if (!thread.jobState.isFinite()) {
+                if (!thread.getJobState().isFinite()) {
                     try {
                         LOG.trace("Joining {}", thread.getName());
-                        thread.join(timeout);
+                        thread.join(Math.max(1, jobsStatusPeriod + iterationStart - System.currentTimeMillis()));
                         LOG.trace("Joined {}", thread.getName());
-                        if (!thread.jobState.isFinite()) {
+                        if (!thread.getJobState().isFinite()) {
                             allFinite = false;
                         }
                     } catch (InterruptedException e) {
                         LOG.trace("Interrupted join: {}", thread.getName());
-                        timeout = 1;
                         allFinite = false;
                     }
                 }
@@ -175,9 +183,36 @@ public class Runtime {
 
     protected int cookExitStatus() {
         return threads.stream()
-                .mapToInt(t -> t.jobState.getExitStatus())
+                .mapToInt(t -> t.getJobState().getExitStatus())
                 .max()
                 .orElse(2);
+    }
+
+    public void waitForAllAtLeast(final JobState expectedJobState) {
+        while (expectedJobState.ordinal() > minJobState.ordinal()) {
+            LOG.debug("Wating for all job at minumum state {}, actual minimal state is {}", expectedJobState, minJobState);
+            synchronized (minJobStateCounter) {
+                try {
+                    minJobStateCounter.wait(1000);
+                } catch (InterruptedException e) {
+                    LOG.info("Interupted", e);
+                }
+            }
+        }
+    }
+
+    public void stateChanged() {
+        synchronized (minJobStateCounter) {
+            final JobState newMinJobState = threads.stream()
+                    .map(JobThread::getJobState)
+                    .min(Comparator.comparing(JobState::ordinal))
+                    .orElse(INITIALIZING);
+            if (minJobState != newMinJobState) {
+                minJobState = newMinJobState;
+                minJobStateCounter.incrementAndGet();
+                minJobStateCounter.notifyAll();
+            }
+        }
     }
 
 }

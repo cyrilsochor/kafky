@@ -1,13 +1,9 @@
 package io.github.cyrilsochor.kafky.api.job;
 
-public interface Consumer<V> {
+import io.github.cyrilsochor.kafky.api.component.Component;
 
-    default void init() throws Exception {
-    }
+public interface Consumer<V> extends Component {
 
     void consume(V value) throws Exception;
-
-    default void close() throws Exception {
-    }
 
 }

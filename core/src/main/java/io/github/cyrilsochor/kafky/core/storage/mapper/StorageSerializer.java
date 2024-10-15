@@ -2,6 +2,7 @@ package io.github.cyrilsochor.kafky.core.storage.mapper;
 
 import static java.util.Collections.singletonList;
 
+import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.Consumer;
 import io.github.cyrilsochor.kafky.core.storage.model.Header;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
@@ -15,7 +16,7 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 
-public class StorageSerializer implements Consumer<ConsumerRecord<?, ?>> {
+public class StorageSerializer implements Consumer<ConsumerRecord<Object, Object>>, Component {
 
     protected final List<Consumer<Message>> consumers;
 
@@ -42,7 +43,7 @@ public class StorageSerializer implements Consumer<ConsumerRecord<?, ?>> {
     }
 
     @Override
-    public void consume(final ConsumerRecord<?, ?> input) throws Exception {
+    public void consume(final ConsumerRecord<Object, Object> input) throws Exception {
         final Message message = new Message(
                 input.topic(),
                 input.partition(),

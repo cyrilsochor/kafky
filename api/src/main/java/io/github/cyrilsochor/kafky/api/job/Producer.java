@@ -1,17 +1,9 @@
 package io.github.cyrilsochor.kafky.api.job;
 
-public interface Producer<V> {
+import io.github.cyrilsochor.kafky.api.component.Component;
 
-    default void init() throws Exception {
-    }
+public interface Producer<V> extends Component {
 
     V produce() throws Exception;
-
-    default void close() throws Exception {
-    }
-
-    default int getPriority() {
-        return 0;
-    }
 
 }

@@ -1,6 +1,7 @@
 package io.github.cyrilsochor.kafky.core.storage.text;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.Consumer;
 import io.github.cyrilsochor.kafky.core.serde.Serdes;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
@@ -10,7 +11,7 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class TextWriter implements Consumer<Message> {
+public class TextWriter implements Consumer<Message>, Component {
 
     protected final Writer writer;
     protected ObjectMapper mapper;

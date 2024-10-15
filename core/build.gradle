@@ -3,16 +3,27 @@ plugins {
 }
 
 dependencies {
+
     api libs.slf4j
     api libs.jackson.core
     api libs.jackson.annotations
+    api libs.avro
+    api libs.commons.lang3
+    api libs.commons.collections4
+
     implementation project(':api')
     implementation libs.jackson.datatype.jsr310
     implementation libs.jackson.datatype.jdk8
-    implementation libs.commons.lang3
-    implementation libs.commons.collections4
     implementation libs.jackson.dataformat.yaml
     implementation libs.jackson.dataformat.avro
     implementation libs.apicurio.registry.serdes.avro.serde
     implementation libs.reflections
+    implementation libs.evalex
+    implementation libs.brave
+
+    testImplementation libs.junit.jupiter.api
+
+    testRuntimeOnly libs.junit.jupiter
+    testRuntimeOnly libs.logback.classic
+
 }

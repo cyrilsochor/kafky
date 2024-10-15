@@ -5,11 +5,17 @@ import io.github.cyrilsochor.kafky.core.config.KafkyConfiguration;
 import io.github.cyrilsochor.kafky.core.runtime.Runtime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 
 @SuppressWarnings("java:S106")
 public class Application {
 
     private static final Logger LOG = LoggerFactory.getLogger(Application.class);
+
+    static {
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
+    }
 
     public static void main(String[] args) {
         if (args.length == 0) {

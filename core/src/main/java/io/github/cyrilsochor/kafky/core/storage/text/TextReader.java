@@ -3,6 +3,7 @@ package io.github.cyrilsochor.kafky.core.storage.text;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.MappingIterator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.Producer;
 import io.github.cyrilsochor.kafky.core.serde.Serdes;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
@@ -12,7 +13,7 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class TextReader implements Producer<Message> {
+public class TextReader implements Producer<Message>, Component {
 
     protected final Reader reader;
     protected MappingIterator<Message> iterator;

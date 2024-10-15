@@ -12,6 +12,7 @@ jackson-datatype-jsr310 = { module="com.fasterxml.jackson.datatype:jackson-datat
 jackson-datatype-jdk8   = { module="com.fasterxml.jackson.datatype:jackson-datatype-jdk8",     version="2.17.2" }
 commons-lang3           = { module="org.apache.commons:commons-lang3",                         version="3.17.0" }
 commons-collections4    = { module="org.apache.commons:commons-collections4",                  version="4.4"    }
+commons-csv             = { module="org.apache.commons:commons-csv",                           version="1.12.0" }
 kafka-clients           = { module="org.apache.kafka:kafka-clients",                           version="3.8.0"  }
 apicurio-registry-serdes-avro-serde={ module="io.apicurio:apicurio-registry-serdes-avro-serde",version="2.6.3.Final"}
 reflections             = { module="org.reflections:reflections",                              version="0.9.12" }

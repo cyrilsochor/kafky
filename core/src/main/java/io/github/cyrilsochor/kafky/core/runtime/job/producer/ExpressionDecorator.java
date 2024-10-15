@@ -4,7 +4,9 @@ import static io.github.cyrilsochor.kafky.core.util.Assert.assertFalse;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertNotNull;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
 import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonList;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 
 import com.ezylang.evalex.EvaluationException;
@@ -16,9 +18,12 @@ import com.ezylang.evalex.parser.ParseException;
 import io.github.cyrilsochor.kafky.api.job.producer.AbstractRecordProducer;
 import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
+import io.github.cyrilsochor.kafky.core.exception.ExpressionEvaluationException;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.stream.Streams;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Headers;
@@ -26,12 +31,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class ExpressionDecorator extends AbstractRecordProducer {
@@ -60,7 +68,35 @@ public class ExpressionDecorator extends AbstractRecordProducer {
                             e -> createPath(e.getKey().toString()),
                             e -> createExpression(expressionConfiguration, e.getValue().toString())));
 
-            return new ExpressionDecorator(cfg, headerExpressions, valueExpressions);
+            final Map<Object, Object> constantArrayFiles = PropertiesUtils.getMap(cfg, KafkyProducerConfig.EXPRESSION_CONSTANT_ARRAY_FILES);
+            final Map<String, Object> constants = constantArrayFiles == null ? emptyMap()
+                    : constantArrayFiles
+                    .entrySet().stream()
+                    .collect(toMap(
+                            e -> e.getKey().toString(),
+                            e -> readCSV(e.getValue().toString())));
+
+            return new ExpressionDecorator(cfg, headerExpressions, valueExpressions, constants);
+        }
+    }
+
+    protected static List<Object> readCSV(final String path) {
+        try {
+            final List<Object> values = new ArrayList<>();
+
+            final Iterable<CSVRecord> records = CSVFormat.DEFAULT.parse(Files.newBufferedReader(Path.of(path)));
+            for (CSVRecord rec : records) {
+                if (rec.size() == 0) {
+                    values.add("");
+                } else if (rec.size() == 1) {
+                    values.add(rec.get(0));
+                } else {
+                    values.add(rec.toList());
+                }
+            }
+            return values;
+        } catch (Exception e) {
+            throw new RuntimeException("Error parse CSV file " + path, e);
         }
     }
 
@@ -83,18 +119,23 @@ public class ExpressionDecorator extends AbstractRecordProducer {
         return functions;
     }
 
-    final Map<Object, Object> cfg;
+    protected final Map<Object, Object> cfg;
     protected final Map<String, Expression> headerExpressions;
     protected final Map<List<String>, Expression> valueExpressions;
+    protected final Map<String, Object> constants;
+
+    protected final AtomicLong sequenceNumber = new AtomicLong();
 
     public ExpressionDecorator(
             final Map<Object, Object> cfg,
             final Map<String, Expression> headerExpressions,
-            final Map<List<String>, Expression> valueExpressions) {
+            final Map<List<String>, Expression> valueExpressions,
+            final Map<String, Object> constants) {
         super();
         this.cfg = cfg;
         this.headerExpressions = headerExpressions;
         this.valueExpressions = valueExpressions;
+        this.constants = constants;
     }
 
     @Override
@@ -104,6 +145,7 @@ public class ExpressionDecorator extends AbstractRecordProducer {
 
     @Override
     public ProducerRecord<Object, Object> produce() throws Exception {
+
         final ProducerRecord<Object, Object> source = getChainNext().produce();
 
         final Object value = source.value();
@@ -115,12 +157,23 @@ public class ExpressionDecorator extends AbstractRecordProducer {
         assertNotNull(headers, "Expected non-null headers");
         decorateHeaders(headers);
 
+        sequenceNumber.incrementAndGet();
+
         return source;
     }
 
     protected void decorateValue(final GenericRecord value) throws EvaluationException, ParseException {
         for (Entry<List<String>, Expression> decorateEntry : valueExpressions.entrySet()) {
-            decorateValue(value, decorateEntry.getKey(), decorateEntry.getValue());
+            final List<String> valuePath = decorateEntry.getKey();
+            final Expression expression = decorateEntry.getValue();
+            try {
+                decorateValue(value, valuePath, expression);
+            } catch (Exception e) {
+                throw new ExpressionEvaluationException(
+                        valuePath.stream().collect(joining(".")),
+                        expression,
+                        e);
+            }
         }
     }
 
@@ -163,19 +216,27 @@ public class ExpressionDecorator extends AbstractRecordProducer {
 
     protected List<String> evaluateHeaderExpression(final Expression expression, final List<String> oldValues)
             throws EvaluationException, ParseException {
-        final EvaluationValue result = expression
-                .with("oldValues", oldValues)
-                .and("configuration", cfg)
+        final EvaluationValue result = fillBaseValues(expression)
+                .and("oldValues", oldValues)
                 .evaluate();
         return toStringList(result);
     }
 
     protected Object evaluateValueExpression(final Expression expression, final Object oldValue) throws EvaluationException, ParseException {
-        final EvaluationValue result = expression
-                .with("oldValue", oldValue)
-                .and("configuration", cfg)
+        final EvaluationValue result = fillBaseValues(expression)
+                .and("oldValue", oldValue)
                 .evaluate();
         return result.getValue();
+    }
+
+    protected Expression fillBaseValues(final Expression expression) throws ParseException {
+        final Expression exp = expression.copy();
+        exp.and("configuration", cfg);
+        exp.and("sequenceNumber", sequenceNumber.get());
+        for (final Entry<String, Object> c : constants.entrySet()) {
+            exp.and(c.getKey(), c.getValue());
+        }
+        return exp;
     }
 
     protected List<String> toStringList(final EvaluationValue result) {

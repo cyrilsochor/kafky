@@ -19,6 +19,7 @@ dependencies {
     implementation libs.apicurio.registry.serdes.avro.serde
     implementation libs.reflections
     implementation libs.evalex
+    implementation libs.commons.csv
     implementation libs.brave
 
     testImplementation libs.junit.jupiter.api

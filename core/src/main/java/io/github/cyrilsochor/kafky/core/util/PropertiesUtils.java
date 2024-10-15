@@ -110,6 +110,26 @@ public class PropertiesUtils {
         return get(properties, key, PropertiesUtils::parseLong);
     }
 
+    /* Booelean */
+
+    private static boolean parseBoolean(final String key, final Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        } else if (value instanceof String s) {
+            return Boolean.parseBoolean(s);
+        } else {
+            throw new InvalidPropertyType(key, value.getClass(), Long.class, String.class);
+        }
+    }
+
+    public static boolean getBooleanRequired(final Map<Object, Object> properties, final String key) {
+        return getRequired(properties, key, PropertiesUtils::parseBoolean);
+    }
+
+    public static Boolean getBoolean(final Map<Object, Object> properties, final String key) {
+        return get(properties, key, PropertiesUtils::parseBoolean);
+    }
+
     /* Path */
 
     private static Path parsePath(final String key, final Object value) {

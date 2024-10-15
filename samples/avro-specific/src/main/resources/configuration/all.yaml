@@ -16,13 +16,13 @@ consumers:
         output.file: users-2.yaml
         messages.count: 2
 producers:
-#    user-generate:
-#        topic: user
-#        log.file: user-generate.log
-#        messages.count: 200
-#        generator.class: io.github.cyrilsochor.kafky.core.runtime.job.producer.RandomMessageGenerator
-#        generator.value.class: com.example.avro.User
-#        delay: 10
+    user-generate:
+        topic: user
+        log.file: user-generate.log
+        messages.count: 200
+        generator.class: io.github.cyrilsochor.kafky.core.runtime.job.producer.RandomMessageGenerator
+        generator.value.class: io.github.cyrilsochor.kafky.sample.avro.specific.model.User
+        delay: 10
     user-push:
         template.file: users.yaml
         topic: user-2
@@ -36,4 +36,4 @@ global.producers:
     apicurio.registry.find-latest: true
     apicurio.registry.auto-register: true
 report:
-    interval: 1000
+    jobs-status-period: 1000

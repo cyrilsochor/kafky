@@ -26,7 +26,11 @@ public class KafkyDefaults {
             "apicurio.value.globalId",
             "apicurio.value.encoding");
 
-    public static long DEFAULT_REPORT_INTERVAL = 10_000;
+    public static final Map<Object, Object> DEFAULT_REPORT_PROPERTIES = Map.of(
+            KafkyReportConfig.JOBS_STATUS_PERIOD, 10_000,
+            KafkyReportConfig.SYSTEM_OUT, true,
+            KafkyReportConfig.LOG, true
+    );
 
     private KafkyDefaults() {
         // no instance

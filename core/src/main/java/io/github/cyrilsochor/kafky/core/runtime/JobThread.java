@@ -8,6 +8,7 @@ import static io.github.cyrilsochor.kafky.core.runtime.JobState.RUNNING;
 import static io.github.cyrilsochor.kafky.core.runtime.JobState.SUCCESS;
 import static java.lang.String.format;
 
+import io.github.cyrilsochor.kafky.core.report.Report;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +19,7 @@ public class JobThread extends Thread {
     private static final String JOB_THREAD_NAME = "job%s";
 
     protected final Job job;
+    protected final Report report;
     protected JobState jobState = INITIALIZING;
     protected JobStatistics jobStatistics = new JobStatistics();
 
@@ -35,7 +37,7 @@ public class JobThread extends Thread {
 
         @Override
         public void run() {
-            LOG.info("Job {} CREATED: {}", thread.job.getId(), thread.job.getInfo());
+            thread.report.report("Job %s CREATED: %s", thread.job.getId(), thread.job.getInfo());
             thread.jobStatistics.start();
             try {
 
@@ -47,14 +49,14 @@ public class JobThread extends Thread {
 
             } catch (Exception e) {
                 thread.jobState = FAILED;
-                LOG.error("Job {} FAILED", thread.job.getId(), e);
+                thread.report.reportException(e, "Job %s FAILED", thread.job.getId());
             } finally {
                 try {
                     LOG.debug("Running job {} phase finish", thread.job.getId());
                     thread.job.finish();
                 } catch (Exception e) {
                     thread.jobState = FAILED;
-                    LOG.error("Job {} finish FAILED", thread.job.getId(), e);
+                    thread.report.reportException(e, "Job %s finish FAILED", thread.job.getId());
                 }
                 thread.jobStatistics.finish();
             }
@@ -74,7 +76,7 @@ public class JobThread extends Thread {
             while (!last) {
                 if (thread.jobState == CANCELING) {
                     thread.jobState = CANCELED;
-                    LOG.info("Job {} CANCELED", thread.job.getId());
+                    thread.report.report("Job %s CANCELED", thread.job.getId());
                     last = true;
                 } else {
                     LOG.debug("Execution job {} {} iteration #{}", thread.job.getId(), phase, iterationSeq);
@@ -84,7 +86,7 @@ public class JobThread extends Thread {
                     thread.jobStatistics.incrementProducesRecordsCount(result.producedMessagesCount());
                     if (last) {
                         thread.jobState = finalState;
-                        LOG.info("Job {} {}", thread.job.getId(), finalState);
+                        thread.report.report("Job %s %s", thread.job.getId(), finalState);
                     }
                 }
                 iterationSeq++;
@@ -93,14 +95,19 @@ public class JobThread extends Thread {
 
     }
 
-    protected JobThread(Runnable runnable, Job job, String name) {
+    protected JobThread(
+            Runnable runnable,
+            Job job,
+            String name,
+            Report report) {
         super(runnable, name);
         this.job = job;
+        this.report = report;
     }
 
-    public static JobThread of(final Job job) {
+    public static JobThread of(final Job job, Report report) {
         final JobRunnable runnable = new JobRunnable();
-        final JobThread thread = new JobThread(runnable, job, format(JOB_THREAD_NAME, job.getId()));
+        final JobThread thread = new JobThread(runnable, job, format(JOB_THREAD_NAME, job.getId()), report);
         runnable.setThread(thread);
         return thread;
     }

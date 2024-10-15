@@ -2,4 +2,5 @@ global.producers:
     apicurio.registry.find-latest: true
     apicurio.registry.auto-register: true
 report:
-    interval: 1000
+    jobs-status-period: 1000
+    system-out: false

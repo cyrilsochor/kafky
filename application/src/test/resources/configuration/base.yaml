@@ -1,0 +1,5 @@
+global.producers:
+    apicurio.registry.find-latest: true
+    apicurio.registry.auto-register: true
+report:
+    interval: 1000

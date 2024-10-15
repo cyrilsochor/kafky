@@ -1,6 +1,19 @@
 plugins {
     id 'buildlogic.java-library-conventions'
+    //id "com.bakdata.avro" version "1.4.0"
 }
 
 dependencies {
+    api libs.slf4j
+    implementation libs.jackson.core
+    implementation libs.jackson.annotations
+    implementation libs.jackson.datatype.jsr310
+    implementation libs.jackson.datatype.jdk8
+    implementation libs.commons.lang3
+    implementation libs.commons.collections4
+    implementation libs.jackson.dataformat.yaml
+    implementation libs.jackson.dataformat.avro
+    implementation libs.kafka.clients
+    implementation libs.apicurio.registry.serdes.avro.serde
+    implementation libs.reflections
 }

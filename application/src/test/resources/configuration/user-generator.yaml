@@ -1,0 +1,12 @@
+producers:
+    user-generate:
+        topic: user
+        log.file: user-generate.log
+        messages.count: 2
+        generator.class: io.github.cyrilsochor.kafky.core.runtime.job.producer.RandomMessageGenerator
+        generator.value.class: com.example.avro.User
+global.producers:
+    apicurio.registry.find-latest: true
+    apicurio.registry.auto-register: true
+report:
+    interval: 1000

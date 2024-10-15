@@ -1,0 +1,11 @@
+plugins {
+    id 'buildlogic.java-application-conventions'
+}
+
+dependencies {
+    implementation project(':core')
+}
+
+application {
+    mainClass = 'cz.horadraka.kafky.application.Application'
+}

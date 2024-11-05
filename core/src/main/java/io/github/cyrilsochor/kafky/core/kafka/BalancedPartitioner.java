@@ -64,7 +64,7 @@ public class BalancedPartitioner implements Partitioner {
             partition = partitionCache.computeIfAbsent(System.identityHashCode(valueBytes), t -> computeNext(topic, cluster));
         }
 
-        LOG.info("Computed partition: {}", partition);
+        LOG.debug("Computed partition: {}", partition);
         return partition;
     }
 

@@ -21,6 +21,7 @@ public class KafkyDefaults {
 
     public static final Map<Object, Object> DEFAULT_PRODUCER_CONFIGURATION = Map.of(
             KafkyProducerConfig.MESSAGES_COUNT, 1l,
+            KafkyProducerConfig.WARM_UP_PERCENT, 20,
             KafkyProducerConfig.RECORD_PRODUCERS_PACKAGES, List.of(TemplateRecordProducer.class.getPackage().getName()),
             KafkyProducerConfig.PROPERITES, Map.of(
                     "key.serializer", "org.apache.kafka.common.serialization.StringSerializer"),

@@ -35,4 +35,12 @@ public record IterationResult(
         return new IterationResult(true, 0, i);
     }
 
+    public static IterationResult consumed(int i, boolean last) {
+        return new IterationResult(last, i, 0);
+    }
+
+    public static IterationResult produced(int i, boolean last) {
+        return new IterationResult(last, 0, i);
+    }
+
 }

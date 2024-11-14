@@ -14,6 +14,8 @@ public interface Job {
         return IterationResult.stop();
     }
 
+    IterationResult warmUp() throws Exception;
+
     IterationResult run() throws Exception;
 
     default void finish() throws Exception {

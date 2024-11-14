@@ -42,6 +42,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("unchecked")
 public class ExpressionDecorator extends AbstractRecordProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(ExpressionDecorator.class);

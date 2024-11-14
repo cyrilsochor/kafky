@@ -1,14 +1,17 @@
 package io.github.cyrilsochor.kafky.core.runtime;
 
+import static io.github.cyrilsochor.kafky.api.job.JobState.CANCELING;
+import static io.github.cyrilsochor.kafky.api.job.JobState.INITIALIZING;
+import static io.github.cyrilsochor.kafky.api.job.JobState.STATE_COMPARATOR;
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_CONSUMER_CONFIGURATION;
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_PRODUCER_CONFIGURATION;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.CANCELING;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.INITIALIZING;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.addProperties;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 
+import io.github.cyrilsochor.kafky.api.job.JobState;
+import io.github.cyrilsochor.kafky.api.runtime.RuntimeStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConfiguration;
 import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
 import io.github.cyrilsochor.kafky.core.report.Report;
@@ -20,7 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -29,10 +32,9 @@ import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
-import java.util.function.Function;
 
 @SuppressWarnings("unchecked")
-public class Runtime {
+public class Runtime implements RuntimeStatus {
 
     private static final Logger LOG = LoggerFactory.getLogger(Runtime.class);
 
@@ -104,7 +106,7 @@ public class Runtime {
             addProperties(jobCfg, cfg.globalConsumers());
             addProperties(jobCfg, cfg.global());
             addProperties(jobCfg, DEFAULT_CONSUMER_CONFIGURATION);
-            jobs.add(ConsumerJob.of((String) consumerEntry.getKey(), jobCfg));
+            jobs.add(ConsumerJob.of(this, (String) consumerEntry.getKey(), jobCfg));
         }
 
         for (final Map.Entry<Object, Object> producerEntry : cfg.producers().entrySet()) {
@@ -112,7 +114,7 @@ public class Runtime {
             addProperties(jobCfg, cfg.globalProducers());
             addProperties(jobCfg, cfg.global());
             addProperties(jobCfg, DEFAULT_PRODUCER_CONFIGURATION);
-            jobs.add(ProducerJob.of((String) producerEntry.getKey(), jobCfg));
+            jobs.add(ProducerJob.of(this, (String) producerEntry.getKey(), jobCfg));
         }
 
         for (final Job job : jobs) {
@@ -128,23 +130,22 @@ public class Runtime {
     }
 
     protected synchronized String jobStatusReport() {
-        final Map<JobState, AtomicLong> threadCountByState = new TreeMap<>();
+        final Map<JobState, List<String>> threadCountByState = new TreeMap<>();
         long consumedMessagesCount = 0;
         long producedMessagesCount = 0;
 
         for (final JobThread thread : threads) {
-            Function<? super JobState, ? extends AtomicLong> x = s -> new AtomicLong(0);
-            threadCountByState.computeIfAbsent(thread.getJobState(), x).incrementAndGet();
+            threadCountByState.computeIfAbsent(thread.getJobState(), s -> new LinkedList<>()).add(thread.getName());
             consumedMessagesCount += thread.jobStatistics.getConsumedMessagesCount();
             producedMessagesCount += thread.jobStatistics.getProducedMessagesCount();
         }
 
-        return format("Jobs %s, consumed messages: %8d, produced messages: %8d",
-                threadCountByState.entrySet().stream()
-                        .map(e -> format("%s: %s", e.getKey(), e.getValue()))
-                        .collect(joining(", ")),
+        return format("Produced: %8d, consumed: %8d, jobs %s",
+                producedMessagesCount,
                 consumedMessagesCount,
-                producedMessagesCount);
+                threadCountByState.entrySet().stream()
+                        .map(e -> format("%s %s %s", e.getValue().size(), e.getKey(), e.getValue()))
+                        .collect(joining(", ")));
     }
 
     public Report getReport() {
@@ -203,16 +204,53 @@ public class Runtime {
 
     public void stateChanged() {
         synchronized (minJobStateCounter) {
-            final JobState newMinJobState = threads.stream()
-                    .map(JobThread::getJobState)
-                    .min(Comparator.comparing(JobState::ordinal))
-                    .orElse(INITIALIZING);
+            final JobState newMinJobState = getMinState(threads);
             if (minJobState != newMinJobState) {
                 minJobState = newMinJobState;
                 minJobStateCounter.incrementAndGet();
                 minJobStateCounter.notifyAll();
             }
         }
+    }
+
+    protected JobState getMinState(final Collection<JobThread> t) {
+        return t.stream()
+                .map(JobThread::getJobState)
+                .min(STATE_COMPARATOR)
+                .orElse(INITIALIZING);
+    }
+
+    protected JobState getMaxState(final Collection<JobThread> t) {
+        return t.stream()
+                .map(JobThread::getJobState)
+                .max(STATE_COMPARATOR)
+                .orElse(JobState.SUCCESS);
+    }
+
+    protected Collection<JobThread> getProducerThreads() {
+        return threads.stream()
+                .filter(t -> t.job instanceof ProducerJob)
+                .toList();
+    }
+
+    @Override
+    public Instant getStart() {
+        return start;
+    }
+
+    @Override
+    public JobState getMinJobState() {
+        return getMinState(threads);
+    }
+
+    @Override
+    public JobState getMaxJobState() {
+        return getMaxState(threads);
+    }
+
+    @Override
+    public JobState getMinProducerState() {
+        return getMinState(getProducerThreads());
     }
 
 }

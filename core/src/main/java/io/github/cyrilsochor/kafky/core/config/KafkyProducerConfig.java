@@ -7,6 +7,7 @@ public class KafkyProducerConfig {
     public static final String PARTITION = "partition";
     public static final String INPUT_PATH = "template-file";
     public static final String MESSAGES_COUNT = "messages-count";
+    public static final String WARM_UP_PERCENT = "warm-up-percent";
     public static final String GENERATOR_VALUE_CLASS = "generator-value-class";
     public static final String LOG_FILE = "log-file";
     public static final String DELAY = "delay";

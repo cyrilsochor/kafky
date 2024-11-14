@@ -1,12 +1,13 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 
 import static io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig.MESSAGES_COUNT;
+import static io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig.WARM_UP_PERCENT;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.go;
-import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.producedAndGo;
-import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.producedAndStop;
+import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.produced;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.stop;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldKey;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
+import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLong;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLongRequired;
 import static java.lang.String.format;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
@@ -18,6 +19,7 @@ import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
+import io.github.cyrilsochor.kafky.core.runtime.Runtime;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.producer.Callback;
@@ -41,6 +43,7 @@ public class ProducerJob implements Job {
     private static final Logger LOG = LoggerFactory.getLogger(ProducerJob.class);
 
     public static ProducerJob of(
+            final Runtime runtime,
             final String name,
             final Map<Object, Object> cfg) throws IOException {
         LOG.atDebug().setMessage("Producer job {} properties:\n{}")
@@ -50,7 +53,7 @@ public class ProducerJob implements Job {
                         .collect(joining("\n")))
                 .log();
 
-        final ProducerJob job = new ProducerJob(name);
+        final ProducerJob job = new ProducerJob(runtime, name);
 
         job.kafkaProducerProperties = new Properties();
         job.kafkaProducerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyProducerConfig.PROPERITES));
@@ -67,21 +70,30 @@ public class ProducerJob implements Job {
                 producersPackages,
                 cfg);
 
-        job.messagesCount = getLongRequired(cfg, MESSAGES_COUNT);
+        final long totalCount = getLongRequired(cfg, MESSAGES_COUNT);
+        final Long warmUpPercent = getLong(cfg, WARM_UP_PERCENT);
+        if (warmUpPercent == null) {
+            job.warmUpCount = 0l;
+            job.testCount = totalCount;
+        } else {
+            job.warmUpCount = totalCount * warmUpPercent / 100;
+            job.testCount = totalCount - job.warmUpCount;
+        }
 
         job.delay = PropertiesUtils.getDuration(cfg, KafkyProducerConfig.DELAY);
 
         return job;
     }
 
+    protected final Runtime runtime;
     protected final String name;
     protected Properties kafkaProducerProperties;
 
-    protected Long messagesCount;
+    protected long warmUpCount;
+    protected long testCount;
 
     protected boolean initialized;
     protected RecordProducer recordProducer;
-
 
     protected KafkaProducer<Object, Object> kafkaProducer;
 
@@ -92,9 +104,11 @@ public class ProducerJob implements Job {
 
     protected List<ProducedRecordListener> listeners;
 
-    protected LinkedList<ProducerRecord<Object, Object>> records = new LinkedList<>();
+    protected LinkedList<ProducerRecord<Object, Object>> warmUpRecors = new LinkedList<>();
+    protected LinkedList<ProducerRecord<Object, Object>> testRecors = new LinkedList<>();
 
-    public ProducerJob(final String name) {
+    public ProducerJob(final Runtime runtime, final String name) {
+        this.runtime = runtime;
         this.name = name;
     }
 
@@ -122,8 +136,14 @@ public class ProducerJob implements Job {
         }
 
         final ProducerRecord<Object, Object> message = recordProducer.produce();
-        records.add(message);
-        return records.size() < messagesCount ? go() : stop();
+
+        if (warmUpRecors.size() < warmUpCount) {
+            warmUpRecors.add(message);
+        } else {
+            testRecors.add(message);
+        }
+
+        return testRecors.size() < testCount ? go() : stop();
     }
 
     @Override
@@ -133,22 +153,29 @@ public class ProducerJob implements Job {
     }
 
     @Override
+    public IterationResult warmUp() throws Exception {
+        return sendOneMessage(warmUpRecors);
+    }
+
+    @Override
     public IterationResult run() throws Exception {
+
         if (delay != null) {
             parkNanos(delay.toNanos());
         }
 
-        final ProducerRecord<Object, Object> rec = records.removeFirst();
-        messageSendSeq++;
-        kafkaProducer.send(rec, (Callback) (metadata, exception) -> notifyListeners(messageLogSeq, rec, metadata, exception));
+        return sendOneMessage(testRecors);
+    }
 
-        int producedCount = 1;
-
-        if (records.isEmpty()) {
-            return producedAndStop(producedCount);
+    protected IterationResult sendOneMessage(LinkedList<ProducerRecord<Object, Object>> recors) {
+        final ProducerRecord<Object, Object> rec = recors.poll();
+        if (rec == null) {
+            return IterationResult.stop();
+        } else {
+            messageSendSeq++;
+            kafkaProducer.send(rec, (Callback) (metadata, exception) -> notifyListeners(messageLogSeq, rec, metadata, exception));
+            return produced(1, recors.isEmpty());
         }
-
-        return producedAndGo(producedCount);
     }
 
     protected void notifyListeners(
@@ -188,9 +215,8 @@ public class ProducerJob implements Job {
     public String getInfo() {
         final StringBuilder info = new StringBuilder();
 
-        if (messagesCount != null) {
-            appendFieldValue(info, "messages-count", messagesCount);
-        }
+        appendFieldValue(info, "warm-up-count", warmUpCount);
+        appendFieldValue(info, "test-count", testCount);
 
         RecordProducer p = recordProducer;
         for (int pi = 0; p != null; pi++) {

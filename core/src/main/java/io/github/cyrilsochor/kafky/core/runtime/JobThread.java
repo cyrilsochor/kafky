@@ -1,17 +1,9 @@
 package io.github.cyrilsochor.kafky.core.runtime;
 
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.CANCELED;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.CANCELING;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.FAILED;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.INITIALIZING;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.PREPARED;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.PREPARING;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.RUNNING;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.STARTED;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.STARTING;
-import static io.github.cyrilsochor.kafky.core.runtime.JobState.SUCCESS;
+import static io.github.cyrilsochor.kafky.api.job.JobState.*;
 import static java.lang.String.format;
 
+import io.github.cyrilsochor.kafky.api.job.JobState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +51,10 @@ public class JobThread extends Thread {
 
                 thread.runtime.waitForAllAtLeast(STARTED);
 
+                iterate("warmup", j -> j.warmUp(), WARMUP, WARMED);
+
+                thread.runtime.waitForAllAtLeast(WARMED);
+
                 iterate("run", j -> j.run(), RUNNING, SUCCESS);
 
             } catch (Exception e) {
@@ -90,7 +86,6 @@ public class JobThread extends Thread {
             while (!last) {
                 if (thread.isJobState(CANCELING)) {
                     thread.setJobState(CANCELED);
-                    thread.runtime.getReport().report("Job %s CANCELED", thread.job.getId());
                     last = true;
                 } else {
                     LOG.debug("Execution job {} {} iteration #{}", thread.job.getId(), phase, iterationSeq);
@@ -101,7 +96,6 @@ public class JobThread extends Thread {
                     thread.jobStatistics.incrementProducesRecordsCount(result.producedMessagesCount());
                     if (last) {
                         thread.setJobState(finalState);
-                        thread.runtime.getReport().report("Job %s %s", thread.job.getId(), finalState);
                     }
                 }
                 iterationSeq++;
@@ -121,6 +115,7 @@ public class JobThread extends Thread {
     }
 
     public void setJobState(final JobState state) {
+        LOG.debug("Job {} {}", job.getId(), state);
         this.jobState = state;
         runtime.stateChanged();
     }

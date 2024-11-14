@@ -28,16 +28,6 @@ public class PairRequestMarker implements ProducedRecordListener {
     }
 
     @Override
-    public void init() throws Exception {
-        PairMatcher.registerRequestProducer(this);
-    }
-
-    @Override
-    public void close() throws Exception {
-        PairMatcher.unregisterRequestProducer(this);
-    }
-
-    @Override
     public void consume(final ProducedRecord producedRecord) throws Exception {
         final Header header = producedRecord.record().headers().lastHeader(headerKey);
         if (header != null) {

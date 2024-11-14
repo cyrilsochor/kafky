@@ -10,8 +10,8 @@ dependencies {
     api libs.avro
     api libs.commons.lang3
     api libs.commons.collections4
+    api project(':api')
 
-    implementation project(':api')
     implementation libs.jackson.datatype.jsr310
     implementation libs.jackson.datatype.jdk8
     implementation libs.jackson.dataformat.yaml

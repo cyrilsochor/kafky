@@ -1,6 +1,5 @@
 package io.github.cyrilsochor.kafky.core.kafka;
 
-import io.github.cyrilsochor.kafky.core.pair.PairMatcher;
 import io.github.cyrilsochor.kafky.core.util.FixedSizeMap;
 import org.apache.kafka.clients.producer.Partitioner;
 import org.apache.kafka.clients.producer.RoundRobinPartitioner;
@@ -28,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class BalancedPartitioner implements Partitioner {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PairMatcher.class);
+    private static final Logger LOG = LoggerFactory.getLogger(BalancedPartitioner.class);
 
     protected final ConcurrentMap<String, AtomicInteger> topicCounterMap = new ConcurrentHashMap<>();
     protected final Map<Integer, Integer> partitionCache = new FixedSizeMap<>(100);

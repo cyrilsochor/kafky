@@ -12,7 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -38,11 +41,19 @@ public class ComponentUtils {
             final Class<? extends S> subjectClass,
             final List<String> packages,
             final Map<Object, Object> cfg) {
+        return findImplementationsChain(subject, subjectClass, packages, List.of(new ImplementationParameter(Map.class, cfg)));
+    }
+
+    public static <S extends ChainComponent<S>> S findImplementationsChain(
+            final String subject,
+            final Class<? extends S> subjectClass,
+            final List<String> packages,
+            List<ImplementationParameter> parameters) {
         final LinkedList<S> impls = findImplementations(
                 subject,
                 subjectClass,
                 packages,
-                cfg,
+                parameters,
                 Comparator.<S>comparingInt(p -> p.getPriority()).reversed()
                         .thenComparing(p -> p.getClass().getSimpleName()));
 
@@ -64,29 +75,86 @@ public class ComponentUtils {
             final List<String> packages,
             final Map<Object, Object> cfg,
             final Comparator<S> orderComparator) {
+        return findImplementations(subject, subjectClass, packages, List.of(new ImplementationParameter(Map.class, cfg)), orderComparator);
+    }
+
+    public static class ImplementationParameter {
+        private final Class<?> valueClass;
+        private final Object value;
+
+        public ImplementationParameter(Class<?> valueClass, Object value) {
+            super();
+            this.valueClass = valueClass;
+            this.value = value;
+        }
+
+        public Class<?> getValueClass() {
+            return valueClass;
+        }
+
+        public Object getValue() {
+            return value;
+        }
+
+    }
+
+    public static <S> LinkedList<S> findImplementations(
+            final String subject,
+            final Class<? extends S> subjectClass,
+            final List<String> packages,
+            final List<ImplementationParameter> parameters,
+            final Comparator<S> orderComparator) {
         final Stream<S> nonsorted = packages.stream()
                 .peek(producersPackage -> LOG.debug("Finding {}s in packages {}", subject, producersPackage))
-                .flatMap(producersPackage -> new Reflections(producersPackage, new SubTypesScanner(false)).getSubTypesOf(subjectClass).stream())
+                .flatMap(implPackage -> new Reflections(implPackage, new SubTypesScanner(false)).getSubTypesOf(subjectClass).stream())
                 .peek(producerClass -> LOG.debug("Found {} class {}", subject, producerClass.getName()))
-                .filter(producerClass -> !Modifier.isAbstract(producerClass.getModifiers()))
-                .map(producerClass -> {
-                    try {
-                        final S producer = (S) producerClass.getMethod("of", Map.class).invoke(null, cfg);
-                        if (producer == null) {
-                            LOG.debug("Skipping {} {} - factory method returned null", subject, producerClass.getName());
-                        }
-                        return producer;
-                    } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
-                            | SecurityException e) {
-                        throw new InvalidConfigurationException(format("Invalid factory metod of %s class %s", subject, producerClass.getName()), e);
-                    }
-                })
+                .filter(implClass -> !Modifier.isAbstract(implClass.getModifiers()))
+                .map(implClass -> (S) createImplementation(subject, implClass, parameters))
                 .filter(Objects::nonNull);
         final Stream<S> stream = orderComparator == null ? nonsorted
                 : nonsorted.sorted(orderComparator);
         return stream
                 .peek(p -> LOG.debug("Found {}: {}", subject, p))
                 .collect(toCollection(LinkedList::new));
+    }
+
+    @SuppressWarnings("unchecked")
+    protected static <S> S createImplementation(
+            final String subject,
+            final Class<? extends S> implementationClass,
+            final List<ImplementationParameter> parameters) {
+        try {
+            m: for (final Method method : implementationClass.getMethods()) {
+                if(!"of".equals(method.getName())){
+                    continue;
+                }
+                LOG.trace("Found factory method {}", method);
+                final List<Object> factoryMethodParameterValues = new ArrayList<>();
+                dp: for (final Parameter declaredParameter : method.getParameters()) {
+                    for (ImplementationParameter suppliedParameter : parameters) {
+                        if (declaredParameter.getType().isAssignableFrom(suppliedParameter.getValueClass())) {
+                            factoryMethodParameterValues.add(suppliedParameter.getValue());
+                            continue dp;
+                        }
+                    }
+                    LOG.trace("Factory method {} is not invocable, unknown parameter {}", method, declaredParameter);
+                    continue m;
+                }
+                final Object impl = method.invoke(null, factoryMethodParameterValues.toArray());
+                if (impl == null) {
+                    LOG.debug("Skipping {} {} - factory method returned null", subject, implementationClass.getName());
+                    return null;
+                } else if (implementationClass.isAssignableFrom(impl.getClass())) {
+                    return (S) impl;
+                }
+                throw new InvalidConfigurationException(format("Exxpected return type %s of factory method %s return type",
+                        implementationClass.getName(),
+                        method));
+            }
+            throw new InvalidConfigurationException(format("Factory method not found for %s class %s", subject, implementationClass.getName()));
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | SecurityException e) {
+            throw new InvalidConfigurationException(format("Invalid factory method of %s class %s", subject, implementationClass.getName()), e);
+        }
     }
 
     private ComponentUtils() {

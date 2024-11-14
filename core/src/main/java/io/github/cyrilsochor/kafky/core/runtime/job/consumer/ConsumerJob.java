@@ -15,9 +15,11 @@ import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.api.job.consumer.RecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.StopCondition;
+import io.github.cyrilsochor.kafky.api.runtime.RuntimeStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
+import io.github.cyrilsochor.kafky.core.runtime.Runtime;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -43,6 +45,7 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     private static final Logger LOG = LoggerFactory.getLogger(ConsumerJob.class);
 
     public static ConsumerJob of(
+            final Runtime runtime,
             final String name,
             final Map<Object, Object> cfg) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
@@ -53,7 +56,7 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
                         .collect(joining("\n")))
                 .log();
 
-        final ConsumerJob job = new ConsumerJob(name);
+        final ConsumerJob job = new ConsumerJob(runtime, name);
 
         job.kafkaConsumerProperties = new Properties();
         job.kafkaConsumerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES));
@@ -97,11 +100,16 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
                 "record consumer",
                 RecordConsumer.class,
                 consumersPackages,
-                cfg);
+                List.of(
+                        new ComponentUtils.ImplementationParameter(Map.class, cfg),
+                        new ComponentUtils.ImplementationParameter(ConsumerJobStatus.class, job)
+                )
+                );
 
         return job;
     }
 
+    protected final Runtime runtime;
     protected final String name;
     protected Properties kafkaConsumerProperties;
 
@@ -109,7 +117,7 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     protected List<Assigment> assignments;
 
     protected KafkaConsumer<Object, Object> consumer;
-    protected ConsumerRecords<Object, Object> records;
+    protected LinkedList<ConsumerRecord<Object, Object>> records = new LinkedList<>();
 
     protected RecordConsumer recordConsumer;
 
@@ -118,7 +126,8 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     protected Function<ConsumerJobStatus, Boolean> stopCondition;
     protected long pollTimeout = 1000;
 
-    public ConsumerJob(final String name) {
+    public ConsumerJob(final Runtime runtime, final String name) {
+        this.runtime = runtime;
         this.name = name;
     }
 
@@ -155,7 +164,7 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
 
         readRecords();
 
-        if (records != null && !records.isEmpty()) {
+        if (!records.isEmpty()) {
             return stop();
         }
 
@@ -167,21 +176,34 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     }
 
     @Override
-    public IterationResult run() throws Exception {
+    public IterationResult warmUp() throws Exception {
+        return iterate();
+    }
 
+    @Override
+    public IterationResult run() throws Exception {
+        return iterate();
+    }
+
+    protected IterationResult iterate() throws Exception {
         long iterationStartConsumedMessageCount = consumedMessagesCount;
+
+        boolean stop = stopCondition.apply(this);
+        if (stop) {
+            return IterationResult.stop();
+        }
 
         readRecords();
 
-        boolean stop = false;
-        for (final ConsumerRecord<Object, Object> rec : records) {
-            if (!stop) {
-                recordConsumer.consume(rec);
-                consumedMessagesCount++;
+        while (!stop) {
+            final ConsumerRecord<Object, Object> rec = records.poll();
+            if (rec == null) {
+                break;
             }
+            recordConsumer.consume(rec);
+            consumedMessagesCount++;
             stop = stopCondition.apply(this);
         }
-        records = null;
 
         return IterationResult.of(
                 stop,
@@ -190,14 +212,21 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     }
 
     protected void readRecords() {
-        if (records == null || records.isEmpty()) {
+        if (records.isEmpty()) {
             LOG.atTrace()
                     .setMessage("{} assigment: {}, group metadata: {}")
                     .addArgument(this::getName)
                     .addArgument(consumer::assignment)
                     .addArgument(consumer::groupMetadata)
                     .log();
-            records = consumer.poll(Duration.of(pollTimeout, ChronoUnit.MILLIS));
+            final ConsumerRecords<Object, Object> consumerRecords = consumer.poll(Duration.of(pollTimeout, ChronoUnit.MILLIS));
+            LOG.atTrace()
+                    .setMessage("{} polled: {} records")
+                    .addArgument(this::getName)
+                    .addArgument(consumerRecords.count())
+                    .log();
+
+            consumerRecords.forEach(records::add);
         }
     }
 
@@ -257,7 +286,11 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     protected static record Assigment(
             TopicPartition topicPartition,
             Long offset) {
+    }
 
+    @Override
+    public RuntimeStatus getRuntimeStatus() {
+        return runtime;
     }
 
 }

@@ -1,6 +1,9 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.consumer;
 
+import static io.github.cyrilsochor.kafky.api.job.JobState.WARMED;
+
 import io.github.cyrilsochor.kafky.api.job.consumer.AbstractRecordConsumer;
+import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.pair.PairMatcher;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
@@ -16,7 +19,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.text.DecimalFormat;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
@@ -33,7 +38,7 @@ public class PairResponseMarker extends AbstractRecordConsumer {
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("# ###");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
-    public static PairResponseMarker of(final Map<Object, Object> cfg) throws IOException {
+    public static PairResponseMarker of(final Map<Object, Object> cfg, final ConsumerJobStatus jobStatus) throws IOException {
         final String headerKey = PropertiesUtils.getString(cfg, KafkyConsumerConfig.PAIR_RESPONSE_HEADER);
         if (headerKey == null) {
             return null;
@@ -41,14 +46,20 @@ public class PairResponseMarker extends AbstractRecordConsumer {
 
         final Path statisticsPath = PropertiesUtils.getPath(cfg, KafkyConsumerConfig.PAIR_STATISTICS, KafkyConsumerConfig.PAIR_STATISTICS_SUFFIX);
         final List<String> statisticsSize = PropertiesUtils.getListOfStrings(cfg, KafkyConsumerConfig.PAIR_STATISTICS_SIZE);
-        return new PairResponseMarker(headerKey, statisticsPath, statisticsSize);
+        return new PairResponseMarker(jobStatus, headerKey, statisticsPath, statisticsSize);
     }
 
+    protected final ConsumerJobStatus jobStatus;
     protected final String headerKey;
     protected final Path statisticsPath;
     protected final List<String> statisticsSize;
 
-    public PairResponseMarker(final String headerKey, final Path statisticsPath, final List<String> statisticsSize) {
+    public PairResponseMarker(
+            final ConsumerJobStatus jobStatus,
+            final String headerKey,
+            final Path statisticsPath,
+            final List<String> statisticsSize) {
+        this.jobStatus = jobStatus;
         this.headerKey = headerKey;
         this.statisticsPath = statisticsPath;
         this.statisticsSize = statisticsSize;
@@ -59,7 +70,8 @@ public class PairResponseMarker extends AbstractRecordConsumer {
         final Header header = consumerRecord.headers().lastHeader(headerKey);
         if (header != null) {
             final String key = new String(header.value());
-            PairMatcher.addResponse(key, consumerRecord);
+            final boolean warmup = jobStatus.getRuntimeStatus().getMinProducerState().ordinal() <= WARMED.ordinal();
+            PairMatcher.addResponse(key, consumerRecord, warmup);
         }
 
         getChainNext().consume(consumerRecord);
@@ -85,7 +97,7 @@ public class PairResponseMarker extends AbstractRecordConsumer {
                     writeHeader(writer, "User");
                     writeHeader(writer, "Size");
                     writeHeader(writer, "Passers by");
-                    writeHeader(writer, "Total duration");
+                    writeHeader(writer, "Test duration");
                     writeHeader(writer, "Throughput /m");
                     writeHeader(writer, "Duration t/c");
                     writeHeader(writer, "Duration min");
@@ -109,8 +121,8 @@ public class PairResponseMarker extends AbstractRecordConsumer {
                     writeHeader(writer, "----");
                 }
                 writeRecordStart(writer);
-                writeFieldLocalDateTime(writer, PairMatcher::getStart);
-                writeFieldLocalDateTime(writer, PairMatcher::getFinish);
+                writeFieldInstant(writer, jobStatus.getRuntimeStatus()::getStart);
+                writeFieldInstant(writer, Instant::now);
                 writeFieldString(writer, this::getUser);
                 writeFieldString(writer, this::getSize);
                 writeFieldLong(writer, PairMatcher::getPassersByCount);
@@ -180,6 +192,16 @@ public class PairResponseMarker extends AbstractRecordConsumer {
         writeFieldString(writer, () -> {
             final LocalDateTime v = t.get();
             return v == null ? null : DATE_TIME_FORMATTER.format(v);
+        });
+    }
+
+    protected void writeFieldInstant(final BufferedWriter writer, final Supplier<Instant> t) throws IOException {
+        writeFieldString(writer, () -> {
+            final Instant v = t.get();
+            return v == null ? null
+                    : DATE_TIME_FORMATTER.format(v
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDateTime());
         });
     }
 

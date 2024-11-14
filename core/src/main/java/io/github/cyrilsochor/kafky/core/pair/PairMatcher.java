@@ -25,15 +25,23 @@ public class PairMatcher {
 
     private static final Logger LOG = LoggerFactory.getLogger(PairMatcher.class);
 
-    protected record Pair(
-            long pairTimestamp,
-            long durationMillis,
-            ProducedRecord producedRecord,
-            ConsumerRecord<Object, Object> consumerRecord) {
+    protected static class Pair {
+        protected String key;
+        protected boolean warmUp;
+        protected long pairTimestamp;
+        protected long durationMillis;
+        protected ProducedRecord request;
+        protected ConsumerRecord<Object, Object> response;
+
+        @Override
+        public String toString() {
+            return "Pair [key=" + key + ", warmUp=" + warmUp + ", pairTimestamp=" + pairTimestamp + ", durationMillis=" + durationMillis + "]";
+        }
+
     }
 
-    protected static final Map<String, ProducedRecord> requests = new HashMap<>();
-    protected static final Collection<Pair> pairs = new ArrayList<>();
+    protected static final Map<String, Pair> openPairs = new HashMap<>();
+    protected static final Collection<Pair> finishedPairs = new ArrayList<>();
     protected static long totalCount = 0;
     protected static long passersByCount = 0;
 
@@ -45,33 +53,47 @@ public class PairMatcher {
     protected static Map<Integer, Instant> requestProducers = new ConcurrentHashMap<>();
 
     public static void addRequest(final String key, final ProducedRecord record) {
-        long timestamp = record.metadata().timestamp();
-        synchronized (requests) {
+        synchronized (openPairs) {
             totalCount++;
-            requests.put(key, record);
-            firstRequestTimestamp = min(firstRequestTimestamp, timestamp);
-            lastRequestTimestamp = max(lastRequestTimestamp, timestamp);
+
+            final Pair pair = new Pair();
+            pair.key = key;
+            pair.request = record;
+            openPairs.put(key, pair);
         }
     }
 
-    public static void addResponse(final String key, final ConsumerRecord<Object, Object> record) {
-        synchronized (requests) {
-            final ProducedRecord request = requests.remove(key);
-            if (request == null) {
+    public static void addResponse(final String key, final ConsumerRecord<Object, Object> record, final boolean warmup) {
+        synchronized (openPairs) {
+            final Pair pair = openPairs.remove(key);
+            if (pair == null) {
                 LOG.debug("Unmatched response {}: {}", key, record);
                 passersByCount++;
-            } else {
-                final long timestamp = System.currentTimeMillis(); // don't use record.timestam() - it's producer timestamp with different clock
-                final long duration = timestamp - request.metadata().timestamp();
-                firstResponseTimestamp = min(firstResponseTimestamp, timestamp);
-                lastResponseTimestamp = max(lastResponseTimestamp, timestamp);
-                pairs.add(new Pair(timestamp, duration, request, record));
+                return;
             }
+
+            pair.warmUp = warmup;
+            pair.pairTimestamp = System.currentTimeMillis(); // don't use record.timestam() - it's producer timestamp with different clock
+            pair.durationMillis = pair.pairTimestamp - pair.request.metadata().timestamp();
+            finishedPairs.add(pair);
+
+            if (!pair.warmUp) {
+                final long requestTimestamp = pair.request.metadata().timestamp();
+                firstRequestTimestamp = min(firstRequestTimestamp, requestTimestamp);
+                lastRequestTimestamp = max(lastRequestTimestamp, requestTimestamp);
+                firstResponseTimestamp = min(firstResponseTimestamp, pair.pairTimestamp);
+                lastResponseTimestamp = max(lastResponseTimestamp, pair.pairTimestamp);
+            }
+
+            LOG.debug("Matched pair: {}, firstRequestTimestamp: {}, lastRequestTimestamp: {}, firstResponseTimestamp: {}, lastResponseTimestamp: {}",
+                    pair,
+                    firstRequestTimestamp, lastRequestTimestamp,
+                    firstResponseTimestamp, lastResponseTimestamp);
         }
     }
 
     public static boolean isAllPaired() {
-        return requests.isEmpty();
+        return openPairs.isEmpty();
     }
 
     public static LocalDateTime getStart() {
@@ -115,48 +137,36 @@ public class PairMatcher {
 
     // nulable
     public static Duration getResponseMinDuration() {
-        final OptionalLong millis = pairs.stream()
-                .mapToLong(Pair::durationMillis)
+        final OptionalLong millis = finishedPairs.stream()
+                .mapToLong(p -> p.durationMillis)
                 .min();
         return millis.isPresent() ? Duration.ofMillis(millis.getAsLong()) : null;
     }
 
     // nulable
     public static Duration getResponseAvgDuration() {
-        final OptionalDouble millis = pairs.stream()
-                .mapToLong(Pair::durationMillis)
+        final OptionalDouble millis = finishedPairs.stream()
+                .mapToLong(p -> p.durationMillis)
                 .average();
         return millis.isPresent() ? Duration.ofMillis((long) millis.getAsDouble()) : null;
     }
 
     // nulable
     public static Duration getResponseMedDuration() {
-        final OptionalDouble millis = pairs.stream()
-                .mapToLong(Pair::durationMillis)
+        final OptionalDouble millis = finishedPairs.stream()
+                .mapToLong(p -> p.durationMillis)
                 .sorted()
-                .skip((pairs.size() - 1) / 2).limit(2 - pairs.size() % 2)
+                .skip((finishedPairs.size() - 1) / 2).limit(2 - finishedPairs.size() % 2)
                 .average();
         return millis.isPresent() ? Duration.ofMillis((long) millis.getAsDouble()) : null;
     }
 
     // nulable
     public static Duration getResponseMaxDuration() {
-        final OptionalLong millis = pairs.stream()
-                .mapToLong(Pair::durationMillis)
+        final OptionalLong millis = finishedPairs.stream()
+                .mapToLong(p -> p.durationMillis)
                 .max();
         return millis.isPresent() ? Duration.ofMillis(millis.getAsLong()) : null;
-    }
-
-    public static void registerRequestProducer(final Object producer) {
-        requestProducers.put(System.identityHashCode(producer), Instant.now());
-    }
-
-    public static void unregisterRequestProducer(final Object producer) {
-        requestProducers.remove(System.identityHashCode(producer));
-    }
-
-    public static boolean isAllProduced() {
-        return requestProducers.isEmpty();
     }
 
 }

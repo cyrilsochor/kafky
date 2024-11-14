@@ -1,6 +1,6 @@
 package io.github.cyrilsochor.kafky.api.component;
 
-public interface ChainComponent<C> extends Component {
+public interface ChainComponent<C extends Component> extends Component {
 
     void setChainNext(C nextChainComponent);
 
@@ -8,6 +8,14 @@ public interface ChainComponent<C> extends Component {
 
     default int getPriority() {
         return 0;
+    }
+
+    @Override
+    default void shutdownHook() {
+        final C chainNext = getChainNext();
+        if (chainNext != null) {
+            chainNext.shutdownHook();
+        }
     }
 
 }

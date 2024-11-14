@@ -14,4 +14,6 @@ public interface RuntimeStatus {
 
     Instant getStart();
 
+    Instant getFinish();
+
 }

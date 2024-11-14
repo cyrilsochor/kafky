@@ -38,7 +38,7 @@ public class Runtime implements RuntimeStatus {
 
     private static final Logger LOG = LoggerFactory.getLogger(Runtime.class);
 
-    public class Shutdown implements Runnable {
+    public class ShutdownHook implements Runnable {
 
         @Override
         public void run() {
@@ -62,6 +62,8 @@ public class Runtime implements RuntimeStatus {
                     LockSupport.parkNanos(1_000_000_000l);
                 }
                 LOG.info("Exit - unable to cancel all runnig jobs");
+
+                shutdown();
             }
         }
 
@@ -73,6 +75,8 @@ public class Runtime implements RuntimeStatus {
     protected Report report;
     protected Integer exitStatus;
     protected Instant start = Instant.now();
+    protected Instant finish;
+    protected transient boolean shutdownJobCalled = false;
 
     public void run(final KafkyConfiguration cfg) throws Exception {
         validateBasic(cfg);
@@ -81,9 +85,11 @@ public class Runtime implements RuntimeStatus {
         startJobs();
         waitJobs(cfg);
 
+        shutdown();
         exitStatus = cookExitStatus();
-        final Duration duration = Duration.between(start, Instant.now());
-        report.report("FINISHED exit status: %d, duration: %s", exitStatus, duration.truncatedTo(ChronoUnit.SECONDS));
+        report.report("FINISHED exit status: %d, duration: %s",
+                exitStatus,
+                Duration.between(start, finish).truncatedTo(ChronoUnit.SECONDS));
         System.exit(exitStatus);
     }
 
@@ -123,7 +129,7 @@ public class Runtime implements RuntimeStatus {
     }
 
     protected synchronized void startJobs() {
-        java.lang.Runtime.getRuntime().addShutdownHook(new Thread(new Shutdown(), "Shutdown"));
+        java.lang.Runtime.getRuntime().addShutdownHook(new Thread(new ShutdownHook(), "Shutdown"));
         for (final Thread thread : threads) {
             thread.start();
         }
@@ -140,7 +146,7 @@ public class Runtime implements RuntimeStatus {
             producedMessagesCount += thread.jobStatistics.getProducedMessagesCount();
         }
 
-        return format("Produced: %8d, consumed: %8d, jobs %s",
+        return format("Produced: %8d, consumed: %8d, jobs: %s",
                 producedMessagesCount,
                 consumedMessagesCount,
                 threadCountByState.entrySet().stream()
@@ -178,6 +184,16 @@ public class Runtime implements RuntimeStatus {
 
             if (allFinite) {
                 break;
+            }
+        }
+    }
+
+    protected void shutdown() {
+        if (!shutdownJobCalled) {
+            finish = Instant.now();
+            shutdownJobCalled = true;
+            for (final JobThread thread : threads) {
+                thread.shutdownHook();
             }
         }
     }
@@ -236,6 +252,11 @@ public class Runtime implements RuntimeStatus {
     @Override
     public Instant getStart() {
         return start;
+    }
+
+    @Override
+    public Instant getFinish() {
+        return finish;
     }
 
     @Override

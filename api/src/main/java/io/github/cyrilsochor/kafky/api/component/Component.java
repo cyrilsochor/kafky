@@ -8,6 +8,10 @@ public interface Component {
     default void close() throws Exception {
     }
 
+    default void shutdownHook() {
+
+    }
+
     default String getComponentInfo() {
         return this.getClass().getSimpleName();
     }

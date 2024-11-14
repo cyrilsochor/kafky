@@ -21,6 +21,10 @@ public interface Job {
     default void finish() throws Exception {
     }
 
+    default void shutdownHook() {
+
+    }
+
     default String getInfo() {
         return "";
     };

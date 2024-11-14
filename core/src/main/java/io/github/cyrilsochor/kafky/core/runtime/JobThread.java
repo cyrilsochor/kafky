@@ -101,7 +101,6 @@ public class JobThread extends Thread {
                 iterationSeq++;
             }
         }
-
     }
 
     protected JobThread(
@@ -114,14 +113,14 @@ public class JobThread extends Thread {
         this.runtime = runtime;
     }
 
+    public JobState getJobState() {
+        return this.jobState;
+    }
+
     public void setJobState(final JobState state) {
         LOG.debug("Job {} {}", job.getId(), state);
         this.jobState = state;
         runtime.stateChanged();
-    }
-
-    public JobState getJobState() {
-        return this.jobState;
     }
 
     public boolean isJobState(final JobState expectedJobState) {
@@ -130,6 +129,10 @@ public class JobThread extends Thread {
 
     public boolean isJobStateAtLeast(final JobState atLeastJobState) {
         return jobState.ordinal() >= atLeastJobState.ordinal();
+    }
+
+    public void shutdownHook() {
+        job.shutdownHook();
     }
 
 }

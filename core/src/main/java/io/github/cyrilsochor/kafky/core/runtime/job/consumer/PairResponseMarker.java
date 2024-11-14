@@ -1,6 +1,11 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.consumer;
 
 import static io.github.cyrilsochor.kafky.api.job.JobState.WARMED;
+import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
+import static java.time.temporal.ChronoField.HOUR_OF_DAY;
+import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
+import static java.time.temporal.ChronoField.NANO_OF_SECOND;
+import static java.time.temporal.ChronoField.SECOND_OF_MINUTE;
 
 import io.github.cyrilsochor.kafky.api.job.consumer.AbstractRecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
@@ -23,6 +28,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
 import java.util.List;
@@ -36,7 +42,19 @@ public class PairResponseMarker extends AbstractRecordConsumer {
     private static final CharSequence RECORD_SEPARATOR = "\n";
     private static final CharSequence FIELD_SEPARATOR = "|";
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("# ###");
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = new DateTimeFormatterBuilder() // like ISO_DATE_TIME, truncate to 3 digit millis 
+            .parseCaseInsensitive()
+            .append(ISO_LOCAL_DATE)
+            .appendLiteral('T')
+            .appendValue(HOUR_OF_DAY, 2)
+            .appendLiteral(':')
+            .appendValue(MINUTE_OF_HOUR, 2)
+            .optionalStart()
+            .appendLiteral(':')
+            .appendValue(SECOND_OF_MINUTE, 2)
+            .optionalStart()
+            .appendFraction(NANO_OF_SECOND, 3, 3, true)
+            .toFormatter();
 
     public static PairResponseMarker of(final Map<Object, Object> cfg, final ConsumerJobStatus jobStatus) throws IOException {
         final String headerKey = PropertiesUtils.getString(cfg, KafkyConsumerConfig.PAIR_RESPONSE_HEADER);
@@ -83,12 +101,11 @@ public class PairResponseMarker extends AbstractRecordConsumer {
     }
 
     @Override
-    public void close() throws Exception {
+    public void shutdownHook() {
         if (statisticsPath != null) {
             LOG.info("Writing statistics to {}", statisticsPath.toAbsolutePath());
 
             final boolean exists = Files.exists(statisticsPath);
-
             try (final BufferedWriter writer = Files.newBufferedWriter(statisticsPath, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
                 if (!exists) {
                     writer.append(FIELD_SEPARATOR);
@@ -111,7 +128,7 @@ public class PairResponseMarker extends AbstractRecordConsumer {
                     writeHeader(writer, "----");
                     writeHeader(writer, "---:");
                     writeHeader(writer, "---:");
-                    writeHeader(writer, "---:"); // total duration
+                    writeHeader(writer, "---:"); // Test duration
                     writeHeader(writer, "---:");
                     writeHeader(writer, "---:");
                     writeHeader(writer, "---:");
@@ -122,11 +139,11 @@ public class PairResponseMarker extends AbstractRecordConsumer {
                 }
                 writeRecordStart(writer);
                 writeFieldInstant(writer, jobStatus.getRuntimeStatus()::getStart);
-                writeFieldInstant(writer, Instant::now);
+                writeFieldInstant(writer, jobStatus.getRuntimeStatus()::getFinish);
                 writeFieldString(writer, this::getUser);
                 writeFieldString(writer, this::getSize);
                 writeFieldLong(writer, PairMatcher::getPassersByCount);
-                writeFieldDuration(writer, PairMatcher::getDuration, ChronoUnit.SECONDS);
+                writeFieldDuration(writer, PairMatcher::getTestDuration, ChronoUnit.SECONDS);
                 writeFieldLong(writer, PairMatcher::getThroughputPerMinute);
                 writeFieldDuration(writer, PairMatcher::getTotalDivCountDuration, ChronoUnit.MILLIS);
                 writeFieldDuration(writer, PairMatcher::getResponseMinDuration, ChronoUnit.MILLIS);
@@ -134,12 +151,16 @@ public class PairResponseMarker extends AbstractRecordConsumer {
                 writeFieldDuration(writer, PairMatcher::getResponseMedDuration, ChronoUnit.MILLIS);
                 writeFieldDuration(writer, PairMatcher::getResponseMaxDuration, ChronoUnit.MILLIS);
                 writeFieldString(writer, () -> null);
+            } catch (IOException e) {
+                LOG.error("Error write statistic to {}", statisticsPath, e);
             }
         }
     }
 
+    // nullable
     protected String getUser() {
-        return System.getProperty("user.name");
+        final String rawUsername = System.getProperty("user.name");
+        return rawUsername == null ? null : rawUsername.toLowerCase();
     }
 
     protected String getSize() {
@@ -152,7 +173,7 @@ public class PairResponseMarker extends AbstractRecordConsumer {
             }
         }
 
-        size.append(PairMatcher.getTotalCount());
+        size.append(PairMatcher.getTestCount());
 
         return size.toString();
     }
@@ -215,6 +236,10 @@ public class PairResponseMarker extends AbstractRecordConsumer {
                 return trunc.toString().substring(2).toLowerCase();
             }
         });
+    }
+
+    private Instant getFinish() {
+        return null;
     }
 
 }

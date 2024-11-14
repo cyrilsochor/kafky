@@ -240,6 +240,11 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
     }
 
     @Override
+    public void shutdownHook() {
+        recordConsumer.shutdownHook();
+    }
+
+    @Override
     public long getConsumedMessagesCount() {
         return consumedMessagesCount;
     }

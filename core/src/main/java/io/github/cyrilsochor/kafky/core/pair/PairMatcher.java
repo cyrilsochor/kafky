@@ -96,21 +96,21 @@ public class PairMatcher {
         return openPairs.isEmpty();
     }
 
-    public static LocalDateTime getStart() {
+    public static LocalDateTime getTestStart() {
         return firstRequestTimestamp == Long.MAX_VALUE ? null
                 : Instant.ofEpochMilli(firstRequestTimestamp)
                         .atZone(ZoneId.systemDefault())
                         .toLocalDateTime();
     }
 
-    public static LocalDateTime getFinish() {
+    public static LocalDateTime getTestFinish() {
         return lastResponseTimestamp == Long.MIN_VALUE ? null
                 : Instant.ofEpochMilli(lastResponseTimestamp)
                         .atZone(ZoneId.systemDefault())
                         .toLocalDateTime();
     }
 
-    public static long getTotalCount() {
+    public static long getTestCount() {
         return totalCount;
     }
 
@@ -118,20 +118,20 @@ public class PairMatcher {
         return passersByCount;
     }
 
-    public static Duration getDuration() {
+    public static Duration getTestDuration() {
         return lastResponseTimestamp == Long.MIN_VALUE || firstRequestTimestamp == Long.MAX_VALUE ? null
                 : Duration.ofMillis(lastResponseTimestamp - firstRequestTimestamp);
     }
 
     public static Long getThroughputPerMinute() {
-        final Duration duration = getDuration();
+        final Duration duration = getTestDuration();
         return duration == null || duration.isZero() ? null
                 : totalCount * 1000 * 60 / duration.toMillis();
     }
 
     // nulable
     public static Duration getTotalDivCountDuration() {
-        final Duration duration = getDuration();
+        final Duration duration = getTestDuration();
         return duration == null ? null : duration.dividedBy(totalCount);
     }
 

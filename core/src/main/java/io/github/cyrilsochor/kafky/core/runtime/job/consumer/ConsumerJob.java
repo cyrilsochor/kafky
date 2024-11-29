@@ -8,7 +8,6 @@ import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldKey;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getNonEmptyListOfMaps;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getStringRequired;
-import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 
@@ -20,7 +19,9 @@ import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
 import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.job.AbstractJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
+import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -38,9 +39,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
-public class ConsumerJob implements Job, ConsumerJobStatus {
+public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConsumerJob.class);
 
@@ -49,36 +49,16 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
             final String name,
             final Map<Object, Object> cfg) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        LOG.atDebug().setMessage("Consumer job {} properties:\n{}")
-                .addArgument(name)
-                .addArgument((Supplier<String>) () -> cfg.entrySet().stream()
-                        .map(e -> format("%s: %s", e.getKey(), e.getValue()))
-                        .collect(joining("\n")))
-                .log();
-
         final ConsumerJob job = new ConsumerJob(runtime, name);
 
         job.kafkaConsumerProperties = new Properties();
         job.kafkaConsumerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES));
 
-        final StopCondition customStopCondition = PropertiesUtils.getObjectInstance(
-                cfg,
-                StopCondition.class,
-                KafkyConsumerConfig.STOP_CONDITION);
-        if (customStopCondition != null) {
-            assertNull(job.stopCondition, "Stop condition is already defined");
-            job.stopCondition = customStopCondition;
-        }
+        final String customStopConditionId = PropertiesUtils.getString(cfg, KafkyConsumerConfig.STOP_CONDITION);
+        job.stopCondition = customStopConditionId != null ? runtime.getGlobalComponent(customStopConditionId, StopCondition.class)
+                : new NeverStopCondition();
 
-        final Long messagesCount = PropertiesUtils.getLong(cfg, KafkyConsumerConfig.MESSAGES_COUNT);
-        if (messagesCount != null) {
-            assertNull(job.stopCondition, "Stop condition is already defined");
-            job.stopCondition = new MessageCountStopCondition(messagesCount);
-        }
-
-        if (job.stopCondition == null) {
-            job.stopCondition = new NeverStopCondition();
-        }
+        job.skipWarmUp = PropertiesUtils.getBooleanRequired(cfg, KafkyConsumerConfig.SKIP_WARM_UP);
 
         job.topics = new LinkedList<>();
         job.assignments = new LinkedList<>();
@@ -101,16 +81,13 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
                 RecordConsumer.class,
                 consumersPackages,
                 List.of(
-                        new ComponentUtils.ImplementationParameter(Map.class, cfg),
-                        new ComponentUtils.ImplementationParameter(ConsumerJobStatus.class, job)
-                )
-                );
+                        new ImplementationParameter(Map.class, cfg),
+                        new ImplementationParameter(ConsumerJobStatus.class, job),
+                        new ImplementationParameter(Runtime.class, runtime)));
 
         return job;
     }
 
-    protected final Runtime runtime;
-    protected final String name;
     protected Properties kafkaConsumerProperties;
 
     protected List<String> topics;
@@ -123,22 +100,12 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
 
     protected long consumedMessagesCount;
 
+    protected boolean skipWarmUp;
     protected Function<ConsumerJobStatus, Boolean> stopCondition;
     protected long pollTimeout = 1000;
 
     public ConsumerJob(final Runtime runtime, final String name) {
-        this.runtime = runtime;
-        this.name = name;
-    }
-
-    @Override
-    public String getId() {
-        return "consumer-" + name;
-    }
-
-    @Override
-    public String getName() {
-        return name;
+        super(runtime, "consumer", name);
     }
 
     @Override
@@ -173,6 +140,11 @@ public class ConsumerJob implements Job, ConsumerJobStatus {
         }
 
         return go();
+    }
+
+    @Override
+    public boolean skipWarmUp() {
+        return skipWarmUp;
     }
 
     @Override

@@ -17,7 +17,8 @@ public class KafkyDefaults {
             KafkyConsumerConfig.RECORD_CONSUMERS_PACKAGES, List.of(StorageRecordConsumer.class.getPackage().getName()),
             KafkyConsumerConfig.PROPERITES, Map.of(
                     "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer",
-                    "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true)));
+                    "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true)),
+            KafkyConsumerConfig.SKIP_WARM_UP, false);
 
     public static final Map<Object, Object> DEFAULT_PRODUCER_CONFIGURATION = Map.of(
             KafkyProducerConfig.MESSAGES_COUNT, 1l,

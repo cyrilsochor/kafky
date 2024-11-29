@@ -22,7 +22,6 @@ public class JobThread extends Thread {
 
     protected final Runtime runtime;
     protected final Job job;
-    private JobState jobState = INITIALIZING;
     protected JobStatistics jobStatistics = new JobStatistics();
 
     protected interface Iteration {
@@ -39,7 +38,6 @@ public class JobThread extends Thread {
 
         @Override
         public void run() {
-            thread.runtime.getReport().report("Job %s CREATED: %s", thread.job.getId(), thread.job.getInfo());
             thread.jobStatistics.start();
             try {
 
@@ -51,9 +49,11 @@ public class JobThread extends Thread {
 
                 thread.runtime.waitForAllAtLeast(STARTED);
 
+                if (!thread.job.skipWarmUp()) {
                 iterate("warmup", j -> j.warmUp(), WARMUP, WARMED);
 
                 thread.runtime.waitForAllAtLeast(WARMED);
+            }
 
                 iterate("run", j -> j.run(), RUNNING, SUCCESS);
 
@@ -84,7 +84,7 @@ public class JobThread extends Thread {
             int iterationSeq = 0;
             boolean last = false;
             while (!last) {
-                if (thread.isJobState(CANCELING)) {
+                if (thread.getJobState() == CANCELING) {
                     thread.setJobState(CANCELED);
                     last = true;
                 } else {
@@ -114,21 +114,11 @@ public class JobThread extends Thread {
     }
 
     public JobState getJobState() {
-        return this.jobState;
+        return job.getState();
     }
 
     public void setJobState(final JobState state) {
-        LOG.debug("Job {} {}", job.getId(), state);
-        this.jobState = state;
-        runtime.stateChanged();
-    }
-
-    public boolean isJobState(final JobState expectedJobState) {
-        return jobState == expectedJobState;
-    }
-
-    public boolean isJobStateAtLeast(final JobState atLeastJobState) {
-        return jobState.ordinal() >= atLeastJobState.ordinal();
+        job.setState(state);
     }
 
     public void shutdownHook() {

@@ -5,18 +5,24 @@ import static io.github.cyrilsochor.kafky.api.job.JobState.INITIALIZING;
 import static io.github.cyrilsochor.kafky.api.job.JobState.STATE_COMPARATOR;
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_CONSUMER_CONFIGURATION;
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_PRODUCER_CONFIGURATION;
+import static io.github.cyrilsochor.kafky.core.util.Assert.assertNotNull;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
+import static io.github.cyrilsochor.kafky.core.util.ComponentUtils.createImplementation;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.addProperties;
+import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getClassRequired;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 
+import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.JobState;
 import io.github.cyrilsochor.kafky.api.runtime.RuntimeStatus;
+import io.github.cyrilsochor.kafky.core.config.KafkyComponentConfig;
 import io.github.cyrilsochor.kafky.core.config.KafkyConfiguration;
 import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
 import io.github.cyrilsochor.kafky.core.report.Report;
 import io.github.cyrilsochor.kafky.core.runtime.job.consumer.ConsumerJob;
 import io.github.cyrilsochor.kafky.core.runtime.job.producer.ProducerJob;
+import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,17 +34,20 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.Supplier;
 
 @SuppressWarnings("unchecked")
 public class Runtime implements RuntimeStatus {
 
     private static final Logger LOG = LoggerFactory.getLogger(Runtime.class);
+    private static final String LOG_PROPERTIES_MSG = "{} {} properties:\n{}";
 
-    public class ShutdownHook implements Runnable {
+    protected class ShutdownHook implements Runnable {
 
         @Override
         public void run() {
@@ -69,7 +78,23 @@ public class Runtime implements RuntimeStatus {
 
     }
 
+    protected static final class ConfigLogSupplier implements Supplier<String> {
+        private final Map<Object, Object> jobCfg;
+
+        private ConfigLogSupplier(Map<Object, Object> jobCfg) {
+            this.jobCfg = jobCfg;
+        }
+
+        @Override
+        public String get() {
+            return jobCfg.entrySet().stream()
+                    .map(e -> format("%s: %s", e.getKey(), e.getValue()))
+                    .collect(joining("\n"));
+        }
+    }
+
     protected final List<JobThread> threads = new LinkedList<>();
+    protected final Map<String, Component> globalComponents = new HashMap<>();
     protected JobState minJobState = INITIALIZING;
     protected AtomicLong minJobStateCounter = new AtomicLong();
     protected Report report;
@@ -81,9 +106,15 @@ public class Runtime implements RuntimeStatus {
     public void run(final KafkyConfiguration cfg) throws Exception {
         validateBasic(cfg);
         createReport(cfg);
-        createJobs(cfg);
-        startJobs();
-        waitJobs(cfg);
+        createGlobalComponents(cfg);
+        try {
+            createJobs(cfg);
+            initGlobalComponents();
+            startJobs();
+            waitJobs(cfg);
+        } finally {
+            closeGlobalComponents();
+        }
 
         shutdown();
         exitStatus = cookExitStatus();
@@ -97,34 +128,80 @@ public class Runtime implements RuntimeStatus {
         assertTrue(0 < cfg.consumers().size() + cfg.producers().size(), "At least one consumer or producer is required");
     }
 
-    private void createReport(KafkyConfiguration cfg) {
+    protected void createReport(KafkyConfiguration cfg) {
         final Properties props = new Properties();
         addProperties(props, cfg.report());
         addProperties(props, KafkyDefaults.DEFAULT_REPORT_PROPERTIES);
         report = Report.of(props);
     }
 
+    protected synchronized void createGlobalComponents(final KafkyConfiguration cfg) throws Exception {
+        for (final Map.Entry<Object, Object> componentEntry : cfg.components().entrySet()) {
+            final String componentId = (String) componentEntry.getKey();
+            final Map<Object, Object> componentCfg = new HashMap<>((Map<Object, Object>) componentEntry.getValue());
+            addProperties(componentCfg, cfg.global());
+            LOG.atDebug().setMessage(LOG_PROPERTIES_MSG)
+                    .addArgument("Global component")
+                    .addArgument(componentId)
+                    .addArgument(new ConfigLogSupplier(componentCfg))
+                    .log();
+            final Class<? extends Component> componentClass = getClassRequired(componentCfg, Component.class, KafkyComponentConfig.CLASS);
+            final Component component = createImplementation(
+                    "global",
+                    componentClass,
+                    List.of(
+                            new ImplementationParameter(Map.class, componentCfg),
+                            new ImplementationParameter(Runtime.class, this)));
+            if (component != null) {
+                report.report("Component %s CREATED: %s", componentId, component.getComponentInfo());
+                globalComponents.put(componentId, component);
+            }
+        }
+    }
+
     protected synchronized void createJobs(final KafkyConfiguration cfg) throws Exception {
         final List<Job> jobs = new LinkedList<>();
 
         for (final Map.Entry<Object, Object> consumerEntry : cfg.consumers().entrySet()) {
+            final String name = (String) consumerEntry.getKey();
             final Map<Object, Object> jobCfg = new HashMap<>((Map<Object, Object>) consumerEntry.getValue());
             addProperties(jobCfg, cfg.globalConsumers());
             addProperties(jobCfg, cfg.global());
             addProperties(jobCfg, DEFAULT_CONSUMER_CONFIGURATION);
-            jobs.add(ConsumerJob.of(this, (String) consumerEntry.getKey(), jobCfg));
+            LOG.atDebug().setMessage(LOG_PROPERTIES_MSG)
+                    .addArgument("Consumer job")
+                    .addArgument(name)
+                    .addArgument(new ConfigLogSupplier(jobCfg))
+                    .log();
+            final ConsumerJob job = ConsumerJob.of(this, name, jobCfg);
+            report.report("Job %s CREATED: %s", job.getId(), job.getInfo());
+            jobs.add(job);
         }
 
         for (final Map.Entry<Object, Object> producerEntry : cfg.producers().entrySet()) {
+            final String name = (String) producerEntry.getKey();
             final Map<Object, Object> jobCfg = new HashMap<>((Map<Object, Object>) producerEntry.getValue());
             addProperties(jobCfg, cfg.globalProducers());
             addProperties(jobCfg, cfg.global());
             addProperties(jobCfg, DEFAULT_PRODUCER_CONFIGURATION);
-            jobs.add(ProducerJob.of(this, (String) producerEntry.getKey(), jobCfg));
+            LOG.atDebug().setMessage(LOG_PROPERTIES_MSG)
+                    .addArgument("Producer job")
+                    .addArgument(name)
+                    .addArgument(new ConfigLogSupplier(jobCfg))
+                    .log();
+            final ProducerJob job = ProducerJob.of(this, name, jobCfg);
+            report.report("Job %s CREATED: %s", job.getId(), job.getInfo());
+            jobs.add(job);
         }
 
         for (final Job job : jobs) {
             threads.add(JobThread.of(this, job));
+        }
+    }
+
+    protected void initGlobalComponents() throws Exception {
+        for (final Component component : globalComponents.values()) {
+            component.init();
         }
     }
 
@@ -188,12 +265,21 @@ public class Runtime implements RuntimeStatus {
         }
     }
 
+    protected void closeGlobalComponents() throws Exception {
+        for (final Component component : globalComponents.values()) {
+            component.close();
+        }
+    }
+
     protected void shutdown() {
         if (!shutdownJobCalled) {
             finish = Instant.now();
             shutdownJobCalled = true;
             for (final JobThread thread : threads) {
                 thread.shutdownHook();
+            }
+            for (final Component component : globalComponents.values()) {
+                component.shutdownHook();
             }
         }
     }
@@ -260,6 +346,12 @@ public class Runtime implements RuntimeStatus {
     }
 
     @Override
+    public String getUser() {
+        final String rawUsername = System.getProperty("user.name");
+        return rawUsername == null ? null : rawUsername.toLowerCase();
+    }
+
+    @Override
     public JobState getMinJobState() {
         return getMinState(threads);
     }
@@ -272,6 +364,30 @@ public class Runtime implements RuntimeStatus {
     @Override
     public JobState getMinProducerState() {
         return getMinState(getProducerThreads());
+    }
+
+    public <I> I getGlobalComponent(final String componentId, final Class<? extends I> componentInterface) {
+        final Component component = globalComponents.get(componentId);
+        assertNotNull(component, () -> format("Global component '%s' not found", componentId));
+        assertTrue(componentInterface.isAssignableFrom(component.getClass()),
+                () -> format("Unexpected global component '%s' class, expected  %s, actual %s",
+                        componentId,
+                        componentInterface.getName(),
+                        component.getClass().getName()));
+        return (I) component;
+    }
+
+    public <I> Collection<I> getGlobalComponentsByType(final Class<? extends I> componentInterface) {
+        return globalComponents.values().stream()
+                .map(gc -> {
+                    if (componentInterface.isAssignableFrom(gc.getClass())) {
+                        return (I) gc;
+                    } else {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .toList();
     }
 
 }

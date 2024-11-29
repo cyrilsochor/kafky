@@ -9,9 +9,7 @@ import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldKey;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLong;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLongRequired;
-import static java.lang.String.format;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
-import static java.util.stream.Collectors.joining;
 
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecord;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecordListener;
@@ -20,7 +18,9 @@ import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
 import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.job.AbstractJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
+import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -36,9 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.locks.LockSupport;
-import java.util.function.Supplier;
 
-public class ProducerJob implements Job {
+public class ProducerJob extends AbstractJob implements Job {
 
     private static final Logger LOG = LoggerFactory.getLogger(ProducerJob.class);
 
@@ -46,29 +45,26 @@ public class ProducerJob implements Job {
             final Runtime runtime,
             final String name,
             final Map<Object, Object> cfg) throws IOException {
-        LOG.atDebug().setMessage("Producer job {} properties:\n{}")
-                .addArgument(name)
-                .addArgument((Supplier<String>) () -> cfg.entrySet().stream()
-                        .map(e -> format("%s: %s", e.getKey(), e.getValue()))
-                        .collect(joining("\n")))
-                .log();
-
         final ProducerJob job = new ProducerJob(runtime, name);
 
         job.kafkaProducerProperties = new Properties();
         job.kafkaProducerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyProducerConfig.PROPERITES));
 
         final List<String> producersPackages = PropertiesUtils.getNonEmptyListOfStrings(cfg, KafkyProducerConfig.RECORD_PRODUCERS_PACKAGES);
+        final List<ImplementationParameter> parameters = List.of(
+                new ImplementationParameter(Map.class, cfg),
+                new ImplementationParameter(Runtime.class, runtime));
         job.recordProducer = ComponentUtils.findImplementationsChain(
                 "record producer",
                 RecordProducer.class,
                 producersPackages,
-                cfg);
+                parameters);
         job.listeners = ComponentUtils.findImplementations(
                 "record producer",
                 ProducedRecordListener.class,
                 producersPackages,
-                cfg);
+                parameters,
+                null);
 
         final long totalCount = getLongRequired(cfg, MESSAGES_COUNT);
         final Long warmUpPercent = getLong(cfg, WARM_UP_PERCENT);
@@ -85,8 +81,6 @@ public class ProducerJob implements Job {
         return job;
     }
 
-    protected final Runtime runtime;
-    protected final String name;
     protected Properties kafkaProducerProperties;
 
     protected long warmUpCount;
@@ -108,18 +102,7 @@ public class ProducerJob implements Job {
     protected LinkedList<ProducerRecord<Object, Object>> testRecors = new LinkedList<>();
 
     public ProducerJob(final Runtime runtime, final String name) {
-        this.runtime = runtime;
-        this.name = name;
-    }
-
-    @Override
-    public String getId() {
-        return "producer-" + name;
-    }
-
-    @Override
-    public String getName() {
-        return name;
+        super(runtime, "producer", name);
     }
 
     @Override

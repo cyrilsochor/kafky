@@ -37,6 +37,7 @@ public class ConfigurationManager {
                     new HashMap<>(),
                     new HashMap<>(),
                     new HashMap<>(),
+                    new HashMap<>(),
                     new HashMap<>());
         } else {
             final ObjectMapper mapper = Serdes.getDefaultObjectMapper();
@@ -56,11 +57,12 @@ public class ConfigurationManager {
     }
 
     public static void merge(final KafkyConfiguration target, final KafkyConfiguration sourceLowerPriority) {
+        mergeByKey(target.components(), sourceLowerPriority.components());
         mergeByKey(target.consumers(), sourceLowerPriority.consumers());
-        mergeByKey(target.producers(), sourceLowerPriority.producers());
-        addProperties(target.global(), sourceLowerPriority.global());
         addProperties(target.globalConsumers(), sourceLowerPriority.globalConsumers());
+        mergeByKey(target.producers(), sourceLowerPriority.producers());
         addProperties(target.globalProducers(), sourceLowerPriority.globalProducers());
+        addProperties(target.global(), sourceLowerPriority.global());
         addProperties(target.report(), sourceLowerPriority.report());
     }
 

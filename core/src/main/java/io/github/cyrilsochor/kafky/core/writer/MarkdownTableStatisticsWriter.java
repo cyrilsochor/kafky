@@ -6,7 +6,6 @@ import static java.time.temporal.ChronoField.HOUR_OF_DAY;
 import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
 import static java.time.temporal.ChronoField.NANO_OF_SECOND;
 import static java.time.temporal.ChronoField.SECOND_OF_MINUTE;
-import static java.util.stream.Collectors.toSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +24,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -75,7 +73,7 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
             try {
                 writer.close();
             } catch (IOException e) {
-                throw new RuntimeException("Error close file " + path.toAbsolutePath());
+                throw new RuntimeException("Error close file " + path.toAbsolutePath(), e);
             }
         }
     }
@@ -97,20 +95,55 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
             writeHeader = false;
         }
         writeRecord();
-        writer.flush();
         currentRecord = null;
     }
 
     protected void writeHeader() {
+        try {
+            writer.append(FIELD_SEPARATOR);
+            for (final Statistic statistic : currentRecord) {
+                writer.append(statistic.name());
+                writer.append(FIELD_SEPARATOR);
+            }
+            writer.append(RECORD_SEPARATOR);
+            writer.append(FIELD_SEPARATOR);
+            for (final Statistic statistic : currentRecord) {
+                final CharSequence alignText;
+                if (statistic.flags().contains(ALIGN_RIGHT)) {
+                    alignText = "---:";
+                } else if (statistic.flags().contains(ALIGN_CENTER)) {
+                    alignText = ":--:";
+                } else {
+                    alignText = ":---";
+                }
+                writer.append(alignText);
+                writer.append(FIELD_SEPARATOR);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error write statistics to file " + path.toAbsolutePath(), e);
+        }
     }
 
     protected void writeRecord() {
+        try {
+            writer.append(RECORD_SEPARATOR);
+            writer.append(FIELD_SEPARATOR);
+            for (final Statistic statistic : currentRecord) {
+                writer.append(statistic.valueText());
+                writer.append(FIELD_SEPARATOR);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error write statistics to file " + path.toAbsolutePath(), e);
+        }
     }
 
     protected void addStatistic(final String stat, final Supplier<String> supplier, final Set<Flag> flags) {
         String text;
         try {
             text = supplier.get();
+            if (text == null) {
+                text = "";
+            }
         } catch (Exception e) {
             LOG.error("Statistics '" + stat + "' error", e);
             text = "ERR";
@@ -134,13 +167,13 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
     }
 
     protected void addFlag(final Set<Flag> flags, final Flag flag) {
-        flags.add(flag);    
-        odstranit konflitkni
+        flags.removeAll(flag.getFlagGroup());
+        flags.add(flag);
     }
 
     @Override
     public void writeString(final String stat, final Supplier<String> valueSupplier, final Flag... flags) {
-        addStatistic(stat, valueSupplier, flags, ALIGN_CENTER);
+        addStatistic(stat, valueSupplier, flags, ALIGN_LEFT);
     }
 
     @Override
@@ -148,7 +181,7 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
         addStatistic(stat, () -> {
             final Integer v = valueSupplier.get();
             return v == null ? null : DECIMAL_FORMAT.format(v);
-        }, flags, ALIGH_RIGHT);
+        }, flags, ALIGN_RIGHT);
     }
 
     @Override
@@ -156,7 +189,7 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
         addStatistic(stat, () -> {
             final Long v = valueSupplier.get();
             return v == null ? null : DECIMAL_FORMAT.format(v);
-        }, flags, ALIGH_RIGHT);
+        }, flags, ALIGN_RIGHT);
     }
 
     @Override
@@ -188,7 +221,7 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
                 final Duration trunc = truncateTo == null ? v : v.truncatedTo(truncateTo);
                 return trunc.toString().substring(2).toLowerCase();
             }
-        }, flags, ALIGH_RIGHT);
+        }, flags, ALIGN_RIGHT);
     }
 
 }

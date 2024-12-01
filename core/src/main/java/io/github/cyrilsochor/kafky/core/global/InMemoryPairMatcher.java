@@ -3,13 +3,9 @@ package io.github.cyrilsochor.kafky.core.global;
 import static io.github.cyrilsochor.kafky.core.config.KafkyPairMatcherConfig.PAIR_STATISTICS;
 import static io.github.cyrilsochor.kafky.core.config.KafkyPairMatcherConfig.PAIR_STATISTICS_SIZE;
 import static io.github.cyrilsochor.kafky.core.config.KafkyPairMatcherConfig.PAIR_STATISTICS_SUFFIX;
+import static io.github.cyrilsochor.kafky.core.writer.StatisticsWriter.Flag.ALIGN_RIGHT;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
-import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
-import static java.time.temporal.ChronoField.HOUR_OF_DAY;
-import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
-import static java.time.temporal.ChronoField.NANO_OF_SECOND;
-import static java.time.temporal.ChronoField.SECOND_OF_MINUTE;
 
 import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecord;
@@ -21,20 +17,12 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.text.DecimalFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -45,28 +33,10 @@ import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 
 public class InMemoryPairMatcher implements Component, PairMatcher {
 
     private final Logger LOG = LoggerFactory.getLogger(InMemoryPairMatcher.class);
-
-    private static final CharSequence RECORD_SEPARATOR = "\n";
-    private static final CharSequence FIELD_SEPARATOR = "|";
-    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("# ###");
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = new DateTimeFormatterBuilder() // like ISO_DATE_TIME, truncate to 3 digit millis 
-            .parseCaseInsensitive()
-            .append(ISO_LOCAL_DATE)
-            .appendLiteral('T')
-            .appendValue(HOUR_OF_DAY, 2)
-            .appendLiteral(':')
-            .appendValue(MINUTE_OF_HOUR, 2)
-            .optionalStart()
-            .appendLiteral(':')
-            .appendValue(SECOND_OF_MINUTE, 2)
-            .optionalStart()
-            .appendFraction(NANO_OF_SECOND, 3, 3, true)
-            .toFormatter();
 
     protected class Pair {
         protected String key;
@@ -177,65 +147,14 @@ public class InMemoryPairMatcher implements Component, PairMatcher {
         if (statisticsWriter != null) {
             LOG.info("Writing statistics to {}", statisticsWriter.getPath().toAbsolutePath());
 
-            final boolean exists = Files.exists(statisticsWriter.getPath());
-            try (final BufferedWriter writer = Files.newBufferedWriter(statisticsWriter.getPath(), StandardOpenOption.CREATE,
-                    StandardOpenOption.APPEND)) {
-                if (!exists) {
-                    writer.append(FIELD_SEPARATOR);
-                    writeHeader(writer, "Start");
-                    writeHeader(writer, "Finish");
-                    writeHeader(writer, "User");
-                    writeHeader(writer, "Size");
-                    writeHeader(writer, "Ailments");
-                    writeHeader(writer, "Test duration");
-                    writeHeader(writer, "Throughput /m");
-                    writeHeader(writer, "Duration t/c");
-                    writeHeader(writer, "Duration min");
-                    writeHeader(writer, "Duration avg");
-                    writeHeader(writer, "Duration med");
-                    writeHeader(writer, "Duration max");
-                    writeHeader(writer, "Description");
-                    writeRecordStart(writer);
-                    writeHeader(writer, "----");
-                    writeHeader(writer, "----");
-                    writeHeader(writer, "----");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:"); // Test duration
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "---:");
-                    writeHeader(writer, "----");
-                }
-                writeRecordStart(writer);
-                writeFieldInstant(writer, runtime::getStart);
-                writeFieldInstant(writer, runtime::getFinish);
-                writeFieldString(writer, runtime::getUser);
-                writeFieldString(writer, this::getSize);
-                writeFieldInteger(writer, this::getPassersByCount);
-                writeFieldDuration(writer, this::getTestDuration, ChronoUnit.SECONDS);
-                writeFieldLong(writer, this::getThroughputPerMinute);
-                writeFieldDuration(writer, this::getTotalDivCountDuration, ChronoUnit.MILLIS);
-                writeFieldDuration(writer, this::getResponseMinDuration, ChronoUnit.MILLIS);
-                writeFieldDuration(writer, this::getResponseAvgDuration, ChronoUnit.MILLIS);
-                writeFieldDuration(writer, this::getResponseMedDuration, ChronoUnit.MILLIS);
-                writeFieldDuration(writer, this::getResponseMaxDuration, ChronoUnit.MILLIS);
-                writeFieldString(writer, () -> null);
-            } catch (IOException e) {
-                LOG.error("Error write statistic to {}", statisticsWriter.getPath(), e);
-            }
-
             try {
                 statisticsWriter.open();
                 statisticsWriter.createRecord();
                 statisticsWriter.writeInstant("Start", runtime::getStart);
                 statisticsWriter.writeInstant("Finish", runtime::getFinish);
                 statisticsWriter.writeString("User", runtime::getUser);
-                statisticsWriter.writeString("Size", this::getSize);
-                statisticsWriter.writeInteger("Ailments", this::getPassersByCount);
+                statisticsWriter.writeString("Size", this::getSize, ALIGN_RIGHT);
+                statisticsWriter.writeString("Ailments", this::getAilments, ALIGN_RIGHT);
                 statisticsWriter.writeDuration("Test duration", this::getTestDuration, ChronoUnit.SECONDS);
                 statisticsWriter.writeLong("Throughput /m", this::getThroughputPerMinute);
                 statisticsWriter.writeDuration("Duration t/c", this::getTotalDivCountDuration, ChronoUnit.MILLIS);
@@ -353,71 +272,18 @@ public class InMemoryPairMatcher implements Component, PairMatcher {
         }
     }
 
-    protected void writeHeader(final BufferedWriter writer, final String name) throws IOException {
-        writer.append(name);
-        writer.append(FIELD_SEPARATOR);
-    }
+    protected String getAilments() {
+        final StringBuffer ailments = new StringBuffer();
 
-    protected void writeRecordStart(final BufferedWriter writer) throws IOException {
-        writer.append(RECORD_SEPARATOR);
-        writer.append(FIELD_SEPARATOR);
-    }
-
-    protected void writeFieldString(final BufferedWriter writer, final Supplier<String> supplier) throws IOException {
-        String v;
-        try {
-            v = supplier.get();
-        } catch (Exception e) {
-            LOG.error("Statistics error", e);
-            v = "ERR";
+        final Integer passersBy = getPassersByCount();
+        if (passersBy == null) {
+            ailments.append("? passers by");
+        } else if (passersBy > 0) {
+            ailments.append(passersBy);
+            ailments.append(" passers by");
         }
-        if (v != null) {
-            writer.append(v);
-        }
-        writer.append(FIELD_SEPARATOR);
-    }
 
-    protected void writeFieldInteger(final BufferedWriter writer, final Supplier<Integer> i) throws IOException {
-        writeFieldString(writer, () -> {
-            final Integer v = i.get();
-            return v == null ? null : DECIMAL_FORMAT.format(v);
-        });
-    }
-
-    protected void writeFieldLong(final BufferedWriter writer, final Supplier<Long> l) throws IOException {
-        writeFieldString(writer, () -> {
-            final Long v = l.get();
-            return v == null ? null : DECIMAL_FORMAT.format(v);
-        });
-    }
-
-    protected void writeFieldLocalDateTime(final BufferedWriter writer, final Supplier<LocalDateTime> t) throws IOException {
-        writeFieldString(writer, () -> {
-            final LocalDateTime v = t.get();
-            return v == null ? null : DATE_TIME_FORMATTER.format(v);
-        });
-    }
-
-    protected void writeFieldInstant(final BufferedWriter writer, final Supplier<Instant> t) throws IOException {
-        writeFieldString(writer, () -> {
-            final Instant v = t.get();
-            return v == null ? null
-                    : DATE_TIME_FORMATTER.format(v
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDateTime());
-        });
-    }
-
-    protected void writeFieldDuration(final BufferedWriter writer, final Supplier<Duration> d, final TemporalUnit truncateTo) throws IOException {
-        writeFieldString(writer, () -> {
-            final Duration v = d.get();
-            if (v == null) {
-                return null;
-            } else {
-                final Duration trunc = truncateTo == null ? v : v.truncatedTo(truncateTo);
-                return trunc.toString().substring(2).toLowerCase();
-            }
-        });
+        return ailments.toString();
     }
 
 }

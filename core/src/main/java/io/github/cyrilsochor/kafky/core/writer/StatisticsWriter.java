@@ -6,7 +6,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -15,8 +14,15 @@ public interface StatisticsWriter {
     enum Flag {
         ALIGN_LEFT,
         ALIGN_CENTER,
-        ALIGH_RIGHT,
+        ALIGN_RIGHT,
+        ;
+
+        public Set<Flag> getFlagGroup() {
+            // simple solution - all flags are in one group for now
+            return Set.of(Flag.ALIGN_LEFT, Flag.ALIGN_CENTER, Flag.ALIGN_RIGHT);
+        }
     }
+
 
     void open() throws IOException;
 

@@ -9,12 +9,12 @@ import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getNonEmptyListOfMaps;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getStringRequired;
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toSet;
 import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.api.job.consumer.RecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.StopCondition;
-import io.github.cyrilsochor.kafky.api.runtime.RuntimeStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
@@ -38,7 +38,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
 
@@ -217,6 +219,13 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     }
 
     @Override
+    public Set<String> getConsumedTopics() {
+        return Stream.concat(topics.stream(),
+                assignments.stream().map(a -> a.topicPartition.topic()))
+                .collect(toSet());
+    }
+
+    @Override
     public long getConsumedMessagesCount() {
         return consumedMessagesCount;
     }
@@ -263,11 +272,6 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     protected static record Assigment(
             TopicPartition topicPartition,
             Long offset) {
-    }
-
-    @Override
-    public RuntimeStatus getRuntimeStatus() {
-        return runtime;
     }
 
 }

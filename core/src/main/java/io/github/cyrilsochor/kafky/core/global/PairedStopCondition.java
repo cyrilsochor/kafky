@@ -33,7 +33,7 @@ public class PairedStopCondition implements StopCondition {
             }
         }
 
-        final JobState minProducerState = status.getRuntimeStatus().getMinProducerState();
+        final JobState minProducerState = runtime.getMinProducerState();
         final boolean stop;
         if (status.getState() == WARMUP) {
             // producers may be in states: WARMUP, WARMED

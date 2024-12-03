@@ -11,6 +11,10 @@ public interface PairMatcher {
 
     void addIngoing(ConsumerRecord<Object, Object> inputMessage);
 
+    void setProcesserStartOffset(String topic, int partition, long offset);
+
+    void setProcesserFinishOffset(String topic, int partition, long offset);
+
     boolean isAllPaired();
 
 }

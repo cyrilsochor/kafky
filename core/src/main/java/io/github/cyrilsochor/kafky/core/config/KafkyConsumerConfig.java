@@ -14,6 +14,7 @@ public class KafkyConsumerConfig {
     public static final String PAIR_MATCHER = "pair-matcher";
     public static final String PAIR_RESPONSE_HEADER = "pair-response-header";
     public static final String PASSER_BY_DETECT = "passer-by-detect";
+    public static final String PROCESSOR_GROUP = "processor-group";
 
     private KafkyConsumerConfig() {
         //no instance

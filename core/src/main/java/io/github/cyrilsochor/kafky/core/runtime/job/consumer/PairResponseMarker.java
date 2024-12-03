@@ -49,7 +49,7 @@ public class PairResponseMarker extends AbstractRecordConsumer {
         final Header header = consumerRecord.headers().lastHeader(headerKey);
         if (header != null) {
             final String key = new String(header.value());
-            final boolean warmup = jobStatus.getRuntimeStatus().getMinProducerState().ordinal() <= WARMED.ordinal();
+            final boolean warmup = runtime.getMinProducerState().ordinal() <= WARMED.ordinal();
             pairMatcher.addResponse(key, consumerRecord, warmup);
         }
 

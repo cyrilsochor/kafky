@@ -9,7 +9,6 @@ public interface Component {
     }
 
     default void shutdownHook() {
-
     }
 
     default String getComponentInfo() {

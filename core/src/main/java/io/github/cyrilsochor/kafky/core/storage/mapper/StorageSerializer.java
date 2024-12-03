@@ -8,6 +8,7 @@ import io.github.cyrilsochor.kafky.core.storage.model.Header;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.record.RecordBatch;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -48,7 +49,7 @@ public class StorageSerializer implements Consumer<ConsumerRecord<Object, Object
                 input.topic(),
                 input.partition(),
                 input.offset(),
-                LocalDateTime.ofInstant(Instant.ofEpochMilli(input.timestamp()), ZoneId.systemDefault()),
+                serializeTimestamp(input.timestamp()),
                 serializeHeaders(input.headers()),
                 input.key(),
                 input.value());
@@ -57,7 +58,16 @@ public class StorageSerializer implements Consumer<ConsumerRecord<Object, Object
         }
     }
 
+    protected LocalDateTime serializeTimestamp(final long timestamp) {
+        return timestamp == RecordBatch.NO_TIMESTAMP ? null
+                : LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+    }
+
     protected Collection<Header> serializeHeaders(final Headers inputHeaders) {
+        if (inputHeaders == null || !inputHeaders.iterator().hasNext()) {
+            return null;
+        }
+
         final List<Header> result = new LinkedList<>();
 
         for (org.apache.kafka.common.header.Header inputHeader : inputHeaders) {

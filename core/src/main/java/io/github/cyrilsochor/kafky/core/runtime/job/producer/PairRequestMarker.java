@@ -3,7 +3,8 @@ package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecord;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecordListener;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
-import io.github.cyrilsochor.kafky.core.pair.PairMatcher;
+import io.github.cyrilsochor.kafky.core.global.PairMatcher;
+import io.github.cyrilsochor.kafky.core.runtime.Runtime;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.common.header.Header;
 
@@ -12,18 +13,23 @@ import java.util.Map;
 
 public class PairRequestMarker implements ProducedRecordListener {
 
-    public static ProducedRecordListener of(final Map<Object, Object> cfg) throws IOException {
-        final String headerKey = PropertiesUtils.getString(cfg, KafkyProducerConfig.PAIR_REQUEST_HEADER);
-        if (headerKey == null) {
+    public static ProducedRecordListener of(final Map<Object, Object> cfg, final Runtime runtime) throws IOException {
+        final String pairMatcherId = PropertiesUtils.getString(cfg, KafkyProducerConfig.PAIR_MATCHER);
+        if (pairMatcherId == null) {
             return null;
         }
+        final PairMatcher pairMatcher = runtime.getGlobalComponent(pairMatcherId, PairMatcher.class);
 
-        return new PairRequestMarker(headerKey);
+        final String headerKey = PropertiesUtils.getStringRequired(cfg, KafkyProducerConfig.PAIR_REQUEST_HEADER);
+
+        return new PairRequestMarker(pairMatcher, headerKey);
     }
 
+    protected final PairMatcher pairMatcher;
     protected final String headerKey;
 
-    public PairRequestMarker(final String headerKey) {
+    public PairRequestMarker(final PairMatcher pairMatcher, final String headerKey) {
+        this.pairMatcher = pairMatcher;
         this.headerKey = headerKey;
     }
 
@@ -32,7 +38,7 @@ public class PairRequestMarker implements ProducedRecordListener {
         final Header header = producedRecord.record().headers().lastHeader(headerKey);
         if (header != null) {
             final String key = new String(header.value());
-            PairMatcher.addRequest(key, producedRecord);
+            pairMatcher.addProducedRequest(key, producedRecord);
         }
     }
 

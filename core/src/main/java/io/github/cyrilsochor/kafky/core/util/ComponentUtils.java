@@ -119,7 +119,8 @@ public class ComponentUtils {
     }
 
     @SuppressWarnings("unchecked")
-    protected static <S> S createImplementation(
+    // nullable
+    public static <S> S createImplementation(
             final String subject,
             final Class<? extends S> implementationClass,
             final List<ImplementationParameter> parameters) {

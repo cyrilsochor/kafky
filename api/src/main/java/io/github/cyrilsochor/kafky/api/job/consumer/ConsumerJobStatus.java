@@ -1,10 +1,14 @@
 package io.github.cyrilsochor.kafky.api.job.consumer;
 
-import io.github.cyrilsochor.kafky.api.runtime.RuntimeStatus;
+import io.github.cyrilsochor.kafky.api.job.JobState;
+
+import java.util.Set;
 
 public interface ConsumerJobStatus {
 
-    RuntimeStatus getRuntimeStatus();
+    JobState getState();
+
+    Set<String> getConsumedTopics();
 
     long getConsumedMessagesCount();
 

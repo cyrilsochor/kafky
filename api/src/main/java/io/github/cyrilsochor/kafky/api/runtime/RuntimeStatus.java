@@ -16,4 +16,7 @@ public interface RuntimeStatus {
 
     Instant getFinish();
 
+    // nullable
+    String getUser();
+
 }

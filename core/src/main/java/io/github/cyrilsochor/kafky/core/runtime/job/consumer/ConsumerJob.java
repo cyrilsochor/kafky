@@ -23,6 +23,7 @@ import io.github.cyrilsochor.kafky.core.runtime.job.AbstractJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -44,7 +45,12 @@ import java.util.stream.Stream;
 
 public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
 
+
     private static final Logger LOG = LoggerFactory.getLogger(ConsumerJob.class);
+
+    protected static final String PROP_GROUP_ID = "group.id";
+    protected static final String GENERATED_GROUP_ID_PREFIX = "kafky";
+    protected static final int GENERATED_GROUP_ID_RANDOM_LENGTH = 20;
 
     public static ConsumerJob of(
             final Runtime runtime,
@@ -55,6 +61,10 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
 
         job.kafkaConsumerProperties = new Properties();
         job.kafkaConsumerProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES));
+        if (!job.kafkaConsumerProperties.containsKey(PROP_GROUP_ID)) {
+            job.kafkaConsumerProperties.put(PROP_GROUP_ID,
+                    GENERATED_GROUP_ID_PREFIX + RandomStringUtils.insecure().next(GENERATED_GROUP_ID_RANDOM_LENGTH, true, true));
+        }
 
         final String customStopConditionId = PropertiesUtils.getString(cfg, KafkyConsumerConfig.STOP_CONDITION);
         job.stopCondition = customStopConditionId != null ? runtime.getGlobalComponent(customStopConditionId, StopCondition.class)
@@ -114,6 +124,8 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     public IterationResult start() throws Exception {
         if (consumer == null) {
 
+            recordConsumer.init();
+
             consumer = new KafkaConsumer<>(kafkaConsumerProperties);
 
             if (isNotEmpty(topics)) {
@@ -128,7 +140,6 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
                         .forEach(ass -> consumer.seek(ass.topicPartition, ass.offset));
             }
 
-            recordConsumer.init();
         }
 
         readRecords();

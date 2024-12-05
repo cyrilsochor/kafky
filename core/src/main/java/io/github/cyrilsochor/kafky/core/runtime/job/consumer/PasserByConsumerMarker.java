@@ -48,8 +48,9 @@ public class PasserByConsumerMarker extends AbstractRecordConsumer {
         if (processorGroup == null) {
             adminClientProperties = null;
         } else {
+            final Map<Object, Object> consumerProperties = PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES);
             adminClientProperties = new Properties();
-            adminClientProperties.putAll(PropertiesUtils.getMapRequired(cfg, KafkyConsumerConfig.PROPERITES));
+            adminClientProperties.putAll(consumerProperties);
         }
 
         return new PasserByConsumerMarker(pairMatcher, consumerJobStatus, processorGroup, adminClientProperties);
@@ -77,23 +78,29 @@ public class PasserByConsumerMarker extends AbstractRecordConsumer {
 
     @Override
     public void init() throws Exception {
+        LOG.debug("Init start");
         forEachProcessorOffset((BiConsumer<? super TopicPartition, ? super OffsetAndMetadata>) (tp, om) -> {
             pairMatcher.setProcesserStartOffset(tp.topic(), tp.partition(), om.offset());
         });
+        LOG.debug("Init finish");
         super.init();
     }
 
     @Override
     public void consume(final ConsumerRecord<Object, Object> consumerRecord) throws Exception {
+        LOG.debug("Consume start: {}", consumerRecord);
         pairMatcher.addIngoing(consumerRecord);
-        getChainNext().consume(consumerRecord);
+        LOG.debug("Consume finish");
+        super.consume(consumerRecord);
     }
 
     @Override
     public void close() throws Exception {
+        LOG.debug("Close start");
         forEachProcessorOffset((BiConsumer<? super TopicPartition, ? super OffsetAndMetadata>) (tp, om) -> {
             pairMatcher.setProcesserFinishOffset(tp.topic(), tp.partition(), om.offset());
         });
+        LOG.debug("Close finish");
         super.close();
     }
 
@@ -113,7 +120,8 @@ public class PasserByConsumerMarker extends AbstractRecordConsumer {
                         .addArgument(processorGroup)
                         .addArgument(partitionsToOffsetAndMetadata.entrySet().stream()
                                 .sorted(TOPIC_PARTITION_OFFSETS_COMPARATOR)
-                                .map(e -> format("topic %s partition %3d: %9d", e.getKey().topic(), e.getKey().partition(), e.getValue().offset()))
+                                .map(e -> format("topic %s partition %3d: %9d", e.getKey().topic(), e.getKey().partition(),
+                                        e.getValue().offset()))
                                 .collect(joining("\n")))
                         .log();
                 partitionsToOffsetAndMetadata.entrySet()

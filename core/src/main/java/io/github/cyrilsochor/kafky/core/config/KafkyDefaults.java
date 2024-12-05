@@ -6,7 +6,6 @@ import io.github.cyrilsochor.kafky.core.expression.funtion.RandomUUIDFunction;
 import io.github.cyrilsochor.kafky.core.expression.funtion.SizeFunction;
 import io.github.cyrilsochor.kafky.core.runtime.job.consumer.StorageRecordConsumer;
 import io.github.cyrilsochor.kafky.core.runtime.job.producer.TemplateRecordProducer;
-import org.apache.commons.lang3.RandomStringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -16,8 +15,7 @@ public class KafkyDefaults {
     public static final Map<Object, Object> DEFAULT_CONSUMER_CONFIGURATION = Map.of(
             KafkyConsumerConfig.RECORD_CONSUMERS_PACKAGES, List.of(StorageRecordConsumer.class.getPackage().getName()),
             KafkyConsumerConfig.PROPERITES, Map.of(
-                    "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer",
-                    "group.id", "kafky" + RandomStringUtils.insecure().next(20, true, true)),
+                    "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"),
             KafkyConsumerConfig.SKIP_WARM_UP, false);
 
     public static final Map<Object, Object> DEFAULT_PRODUCER_CONFIGURATION = Map.of(

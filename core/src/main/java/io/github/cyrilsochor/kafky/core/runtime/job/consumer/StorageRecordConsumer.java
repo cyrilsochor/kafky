@@ -36,17 +36,26 @@ public class StorageRecordConsumer extends AbstractRecordConsumer {
 
     @Override
     public void init() throws Exception {
+        LOG.debug("Init start");
         storageSerializer.init();
+        LOG.debug("Init finish");
+        super.init();
     }
 
     @Override
-    public void consume(ConsumerRecord<Object, Object> value) throws Exception {
-        storageSerializer.consume(value);
+    public void consume(final ConsumerRecord<Object, Object> consumerRecord) throws Exception {
+        LOG.debug("Consume start: {}", consumerRecord);
+        storageSerializer.consume(consumerRecord);
+        LOG.debug("Consume finish");
+        super.consume(consumerRecord);
     }
 
     @Override
     public void close() throws Exception {
+        LOG.debug("Close start");
         storageSerializer.close();
+        LOG.debug("Close finish");
+        super.close();
     }
 
 }

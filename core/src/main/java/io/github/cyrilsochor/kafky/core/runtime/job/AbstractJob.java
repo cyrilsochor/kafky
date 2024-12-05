@@ -41,9 +41,9 @@ public abstract class AbstractJob implements Job {
     }
 
     @Override
-    public void setState(final JobState jobState) {
-        LOG.debug("Job {} {}", getId(), state);
-        this.state = jobState;
+    public void setState(final JobState newJobState) {
+        LOG.debug("Job {} {}->{}", getId(), state, newJobState);
+        this.state = newJobState;
         runtime.stateChanged();
     }
 

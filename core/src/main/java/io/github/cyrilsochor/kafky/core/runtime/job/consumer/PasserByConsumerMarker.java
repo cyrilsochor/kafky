@@ -1,5 +1,8 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.consumer;
 
+import static java.lang.String.format;
+import static java.util.stream.Collectors.joining;
+
 import io.github.cyrilsochor.kafky.api.job.consumer.AbstractRecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
@@ -14,7 +17,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -23,6 +28,9 @@ import java.util.function.BiConsumer;
 public class PasserByConsumerMarker extends AbstractRecordConsumer {
 
     private static final Logger LOG = LoggerFactory.getLogger(PasserByConsumerMarker.class);
+    protected static final Comparator<Entry<TopicPartition, OffsetAndMetadata>> TOPIC_PARTITION_OFFSETS_COMPARATOR = Comparator
+            .comparing((Entry<TopicPartition, OffsetAndMetadata> e) -> e.getKey().topic())
+            .thenComparing((Entry<TopicPartition, OffsetAndMetadata> e) -> e.getKey().partition());
 
     public static PasserByConsumerMarker of(
             final Map<Object, Object> cfg,
@@ -97,11 +105,18 @@ public class PasserByConsumerMarker extends AbstractRecordConsumer {
                     .log();
             final Set<String> consumedTopics = consumerJobStatus.getConsumedTopics();
             try (AdminClient adminClient = AdminClient.create(adminClientProperties)) {
-                adminClient
+                final Map<TopicPartition, OffsetAndMetadata> partitionsToOffsetAndMetadata = adminClient
                         .listConsumerGroupOffsets(processorGroup)
                         .partitionsToOffsetAndMetadata()
-                        .get()
-                        .entrySet()
+                        .get();
+                LOG.atDebug().setMessage("Received partitionsToOffsetAndMetadata for group {}:\n{}")
+                        .addArgument(processorGroup)
+                        .addArgument(partitionsToOffsetAndMetadata.entrySet().stream()
+                                .sorted(TOPIC_PARTITION_OFFSETS_COMPARATOR)
+                                .map(e -> format("topic %s partition %3d: %9d", e.getKey().topic(), e.getKey().partition(), e.getValue().offset()))
+                                .collect(joining("\n")))
+                        .log();
+                partitionsToOffsetAndMetadata.entrySet()
                         .stream()
                         .filter(e -> consumedTopics.contains(e.getKey().topic()))
                         .forEach(e -> action.accept(e.getKey(), e.getValue()));

@@ -4,7 +4,7 @@ import static io.github.cyrilsochor.kafky.api.job.JobState.INITIALIZING;
 
 import io.github.cyrilsochor.kafky.api.job.JobState;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,13 +12,13 @@ public abstract class AbstractJob implements Job {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractJob.class);
 
-    protected final Runtime runtime;
+    protected final KafkyRuntime runtime;
     protected final String kind;
     protected final String name;
     protected final String id;
     protected JobState state = INITIALIZING;
 
-    public AbstractJob(final Runtime runtime, final String kind, final String name) {
+    public AbstractJob(final KafkyRuntime runtime, final String kind, final String name) {
         this.runtime = runtime;
         this.kind = kind;
         this.name = name;

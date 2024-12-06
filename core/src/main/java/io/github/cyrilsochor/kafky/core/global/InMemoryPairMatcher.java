@@ -10,7 +10,7 @@ import static java.lang.Math.min;
 
 import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecord;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.storage.mapper.StorageSerializer;
 import io.github.cyrilsochor.kafky.core.storage.text.TextWriter;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
@@ -63,14 +63,14 @@ public class InMemoryPairMatcher implements Component, PairMatcher {
     public record TopicPartition(String topic, int partition) {
     }
 
-    public static InMemoryPairMatcher of(final Map<Object, Object> cfg, final Runtime runtime) throws IOException {
+    public static InMemoryPairMatcher of(final Map<Object, Object> cfg, final KafkyRuntime runtime) throws IOException {
         final Path statisticsPath = PropertiesUtils.getPath(cfg, PAIR_STATISTICS, PAIR_STATISTICS_SUFFIX);
         final Path passersByOutputpath = PropertiesUtils.getPath(cfg, PASSERS_BY_OUTPUT_FILE);
         final List<String> statisticsSize = PropertiesUtils.getListOfStrings(cfg, PAIR_STATISTICS_SIZE);
         return new InMemoryPairMatcher(runtime, statisticsPath, passersByOutputpath, statisticsSize);
     }
 
-    protected final Runtime runtime;
+    protected final KafkyRuntime runtime;
     protected final StatisticsWriter statisticsWriter; // nullable
     protected final Path passersByOutputPath; //nullable
     protected final List<String> statisticsSize;
@@ -91,7 +91,7 @@ public class InMemoryPairMatcher implements Component, PairMatcher {
     protected Map<MessageReference, ConsumerRecord<Object, Object>> passersBy; // nullable
 
     protected InMemoryPairMatcher(
-            final Runtime runtime,
+            final KafkyRuntime runtime,
             final Path statisticsPath,
             final Path passersByOutputPath,
             final List<String> statisticsSize) throws IOException {

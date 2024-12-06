@@ -2,7 +2,7 @@ package io.github.cyrilsochor.kafky.application;
 
 import io.github.cyrilsochor.kafky.core.config.ConfigurationManager;
 import io.github.cyrilsochor.kafky.core.config.KafkyConfiguration;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
@@ -37,7 +37,7 @@ public class Application {
                 }
             }
 
-            final Runtime runtime = new Runtime();
+            final KafkyRuntime runtime = new KafkyRuntime();
             runtime.run(cfg);
         } catch (Exception e) {
             LOG.error(e.getMessage(), e);

@@ -6,7 +6,7 @@ import io.github.cyrilsochor.kafky.api.job.consumer.AbstractRecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.global.PairMatcher;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
@@ -16,7 +16,7 @@ import java.util.Map;
 
 public class PairResponseMarker extends AbstractRecordConsumer {
 
-    public static PairResponseMarker of(final Map<Object, Object> cfg, final Runtime runtime, final ConsumerJobStatus jobStatus) throws IOException {
+    public static PairResponseMarker of(final Map<Object, Object> cfg, final KafkyRuntime runtime, final ConsumerJobStatus jobStatus) throws IOException {
         final String pairMatcherId = PropertiesUtils.getString(cfg, KafkyConsumerConfig.PAIR_MATCHER);
         if (pairMatcherId == null) {
             return null;
@@ -28,13 +28,13 @@ public class PairResponseMarker extends AbstractRecordConsumer {
         return new PairResponseMarker(runtime, pairMatcher, jobStatus, headerKey);
     }
 
-    protected final Runtime runtime;
+    protected final KafkyRuntime runtime;
     protected final PairMatcher pairMatcher;
     protected final ConsumerJobStatus jobStatus;
     protected final String headerKey;
 
     public PairResponseMarker(
-            final Runtime runtime,
+            final KafkyRuntime runtime,
             final PairMatcher pairMatcher,
             final ConsumerJobStatus jobStatus,
             final String headerKey) {

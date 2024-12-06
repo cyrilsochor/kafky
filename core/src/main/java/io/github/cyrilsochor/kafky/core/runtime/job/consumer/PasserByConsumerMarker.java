@@ -7,7 +7,7 @@ import io.github.cyrilsochor.kafky.api.job.consumer.AbstractRecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.global.PairMatcher;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -34,7 +34,7 @@ public class PasserByConsumerMarker extends AbstractRecordConsumer {
 
     public static PasserByConsumerMarker of(
             final Map<Object, Object> cfg,
-            final Runtime runtime,
+            final KafkyRuntime runtime,
             final ConsumerJobStatus consumerJobStatus) throws IOException {
         final String passerByDetect = PropertiesUtils.getString(cfg, KafkyConsumerConfig.PASSER_BY_DETECT);
         if (passerByDetect == null) {

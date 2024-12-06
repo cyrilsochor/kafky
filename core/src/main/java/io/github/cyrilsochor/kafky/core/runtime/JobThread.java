@@ -13,14 +13,14 @@ public class JobThread extends Thread {
 
     private static final String JOB_THREAD_NAME = "job%s";
 
-    public static JobThread of(final Runtime runtime, final Job job) {
+    public static JobThread of(final KafkyRuntime runtime, final Job job) {
         final JobRunnable runnable = new JobRunnable();
         final JobThread thread = new JobThread(runtime, runnable, job, format(JOB_THREAD_NAME, job.getId()));
         runnable.setThread(thread);
         return thread;
     }
 
-    protected final Runtime runtime;
+    protected final KafkyRuntime runtime;
     protected final Job job;
     protected JobStatistics jobStatistics = new JobStatistics();
 
@@ -104,7 +104,7 @@ public class JobThread extends Thread {
     }
 
     protected JobThread(
-            final Runtime runtime,
+            final KafkyRuntime runtime,
             final Runnable runnable,
             final Job job,
             final String name) {

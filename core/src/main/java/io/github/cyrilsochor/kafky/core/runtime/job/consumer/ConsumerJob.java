@@ -18,7 +18,7 @@ import io.github.cyrilsochor.kafky.api.job.consumer.StopCondition;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.runtime.job.AbstractJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
@@ -53,7 +53,7 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     protected static final int GENERATED_GROUP_ID_RANDOM_LENGTH = 20;
 
     public static ConsumerJob of(
-            final Runtime runtime,
+            final KafkyRuntime runtime,
             final String name,
             final Map<Object, Object> cfg) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
@@ -95,7 +95,7 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
                 List.of(
                         new ImplementationParameter(Map.class, cfg),
                         new ImplementationParameter(ConsumerJobStatus.class, job),
-                        new ImplementationParameter(Runtime.class, runtime)));
+                        new ImplementationParameter(KafkyRuntime.class, runtime)));
 
         return job;
     }
@@ -116,7 +116,7 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     protected Function<ConsumerJobStatus, Boolean> stopCondition;
     protected long pollTimeout = 1000;
 
-    public ConsumerJob(final Runtime runtime, final String name) {
+    public ConsumerJob(final KafkyRuntime runtime, final String name) {
         super(runtime, "consumer", name);
     }
 

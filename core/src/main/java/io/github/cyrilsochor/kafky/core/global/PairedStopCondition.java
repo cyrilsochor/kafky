@@ -6,7 +6,7 @@ import static io.github.cyrilsochor.kafky.api.job.JobState.WARMUP;
 import io.github.cyrilsochor.kafky.api.job.JobState;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.api.job.consumer.StopCondition;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,13 +14,13 @@ public class PairedStopCondition implements StopCondition {
 
     private static final Logger LOG = LoggerFactory.getLogger(PairedStopCondition.class);
 
-    protected final Runtime runtime;
+    protected final KafkyRuntime runtime;
 
-    public static PairedStopCondition of(final Runtime runtime) {
+    public static PairedStopCondition of(final KafkyRuntime runtime) {
         return new PairedStopCondition(runtime);
     }
 
-    protected PairedStopCondition(Runtime runtime) {
+    protected PairedStopCondition(KafkyRuntime runtime) {
         this.runtime = runtime;
     }
 

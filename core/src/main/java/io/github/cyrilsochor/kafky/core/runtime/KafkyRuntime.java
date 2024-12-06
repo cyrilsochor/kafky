@@ -37,14 +37,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
 @SuppressWarnings("unchecked")
-public class Runtime implements RuntimeStatus {
+public class KafkyRuntime implements RuntimeStatus {
 
-    private static final Logger LOG = LoggerFactory.getLogger(Runtime.class);
+    private static final Logger LOG = LoggerFactory.getLogger(KafkyRuntime.class);
     private static final String LOG_PROPERTIES_MSG = "{} {} properties:\n{}";
 
     protected class ShutdownHook implements Runnable {
@@ -97,6 +98,7 @@ public class Runtime implements RuntimeStatus {
     protected final Map<String, Component> globalComponents = new HashMap<>();
     protected JobState minJobState = INITIALIZING;
     protected AtomicLong minJobStateCounter = new AtomicLong();
+    protected ConcurrentLinkedDeque<OverallStateChangedListener> overallStateChangedListeners = new ConcurrentLinkedDeque<>();
     protected Report report;
     protected Integer exitStatus;
     protected Instant start = Instant.now();
@@ -151,7 +153,7 @@ public class Runtime implements RuntimeStatus {
                     componentClass,
                     List.of(
                             new ImplementationParameter(Map.class, componentCfg),
-                            new ImplementationParameter(Runtime.class, this)));
+                            new ImplementationParameter(KafkyRuntime.class, this)));
             if (component != null) {
                 report.report("Component %s CREATED: %s", componentId, component.getComponentInfo());
                 globalComponents.put(componentId, component);
@@ -308,6 +310,7 @@ public class Runtime implements RuntimeStatus {
         synchronized (minJobStateCounter) {
             final JobState newMinJobState = getMinState(threads);
             if (minJobState != newMinJobState) {
+                fireOverallStateChanged(newMinJobState);
                 minJobState = newMinJobState;
                 minJobStateCounter.incrementAndGet();
                 minJobStateCounter.notifyAll();
@@ -388,6 +391,22 @@ public class Runtime implements RuntimeStatus {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    public void addOverallStateChangedListener(final OverallStateChangedListener listener) {
+        overallStateChangedListeners.add(listener);
+    }
+
+    public boolean removeOverallStateChangedListener(final OverallStateChangedListener listener) {
+        return overallStateChangedListeners.remove(listener);
+    }
+
+    protected void fireOverallStateChanged(final JobState newState) {
+        LOG.debug("Fire overall state changed to {} start", newState);
+        for (final OverallStateChangedListener listener : overallStateChangedListeners) {
+            listener.overallStateChanged(newState);
+        }
+        LOG.debug("Fire overall state changed to {} finish, newState");
     }
 
 }

@@ -11,13 +11,14 @@ import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLong;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLongRequired;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
 
+import io.github.cyrilsochor.kafky.api.job.FutureRegistry;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecord;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecordListener;
 import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.runtime.IterationResult;
 import io.github.cyrilsochor.kafky.core.runtime.Job;
-import io.github.cyrilsochor.kafky.core.runtime.Runtime;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.runtime.job.AbstractJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
@@ -35,14 +36,18 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.locks.LockSupport;
 
-public class ProducerJob extends AbstractJob implements Job {
+public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
 
     private static final Logger LOG = LoggerFactory.getLogger(ProducerJob.class);
 
     public static ProducerJob of(
-            final Runtime runtime,
+            final KafkyRuntime runtime,
             final String name,
             final Map<Object, Object> cfg) throws IOException {
         final ProducerJob job = new ProducerJob(runtime, name);
@@ -53,7 +58,8 @@ public class ProducerJob extends AbstractJob implements Job {
         final List<String> producersPackages = PropertiesUtils.getNonEmptyListOfStrings(cfg, KafkyProducerConfig.RECORD_PRODUCERS_PACKAGES);
         final List<ImplementationParameter> parameters = List.of(
                 new ImplementationParameter(Map.class, cfg),
-                new ImplementationParameter(Runtime.class, runtime));
+                new ImplementationParameter(KafkyRuntime.class, runtime),
+                new ImplementationParameter(FutureRegistry.class, job));
         job.recordProducer = ComponentUtils.findImplementationsChain(
                 "record producer",
                 RecordProducer.class,
@@ -101,7 +107,9 @@ public class ProducerJob extends AbstractJob implements Job {
     protected LinkedList<ProducerRecord<Object, Object>> warmUpRecors = new LinkedList<>();
     protected LinkedList<ProducerRecord<Object, Object>> testRecors = new LinkedList<>();
 
-    public ProducerJob(final Runtime runtime, final String name) {
+    protected final Set<Future<?>> futures = ConcurrentHashMap.newKeySet();
+
+    public ProducerJob(final KafkyRuntime runtime, final String name) {
         super(runtime, "producer", name);
     }
 
@@ -126,7 +134,12 @@ public class ProducerJob extends AbstractJob implements Job {
             testRecors.add(message);
         }
 
-        return testRecors.size() < testCount ? go() : stop();
+        if (testRecors.size() < testCount) {
+            return go();
+        } else {
+            finishAllFutures();
+            return stop();
+        }
     }
 
     @Override
@@ -214,6 +227,22 @@ public class ProducerJob extends AbstractJob implements Job {
         }
 
         return info.toString();
+    }
+
+    @Override
+    public void addFuture(Future<?> future) {
+        LOG.debug("Adding future #{}: {}", this.futures.size(), future);
+        this.futures.add(future);
+    }
+
+    protected void finishAllFutures() throws InterruptedException, ExecutionException {
+        LOG.debug("Finishing {} futures", futures.size());
+        while (!futures.isEmpty()) {
+            final Future<?> future = futures.iterator().next();
+            final Object result = future.get();
+            LOG.debug("Future finished with result {}", result);
+            futures.remove(future);
+        }
     }
 
 }

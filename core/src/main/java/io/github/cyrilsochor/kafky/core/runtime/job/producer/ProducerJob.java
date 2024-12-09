@@ -32,12 +32,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.LockSupport;
@@ -107,7 +107,7 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
     protected LinkedList<ProducerRecord<Object, Object>> warmUpRecors = new LinkedList<>();
     protected LinkedList<ProducerRecord<Object, Object>> testRecors = new LinkedList<>();
 
-    protected final Set<Future<?>> futures = ConcurrentHashMap.newKeySet();
+    protected final Deque<Future<?>> futures = new ConcurrentLinkedDeque<>();
 
     public ProducerJob(final KafkyRuntime runtime, final String name) {
         super(runtime, "producer", name);
@@ -231,18 +231,23 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
 
     @Override
     public void addFuture(Future<?> future) {
-        LOG.debug("Adding future #{}: {}", this.futures.size(), future);
+        LOG.debug("Adding future {}, current {} futures", future, this.futures.size());
         this.futures.add(future);
     }
 
     protected void finishAllFutures() throws InterruptedException, ExecutionException {
         LOG.debug("Finishing {} futures", futures.size());
         while (!futures.isEmpty()) {
-            final Future<?> future = futures.iterator().next();
+            final Future<?> future = futures.getFirst();
             final Object result = future.get();
             LOG.debug("Future finished with result {}", result);
             futures.remove(future);
         }
+    }
+
+    @Override
+    public long getAsyncTasksCount() {
+        return futures.size();
     }
 
 }

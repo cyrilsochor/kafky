@@ -42,4 +42,8 @@ public interface Job {
     default void shutdownHook() {
     }
 
+    default long getAsyncTasksCount() {
+        return 0;
+    }
+
 }

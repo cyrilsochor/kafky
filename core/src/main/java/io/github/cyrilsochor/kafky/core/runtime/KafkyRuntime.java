@@ -218,16 +218,19 @@ public class KafkyRuntime implements RuntimeStatus {
         final Map<JobState, List<String>> threadCountByState = new TreeMap<>();
         long consumedMessagesCount = 0;
         long producedMessagesCount = 0;
+        long asyncJobsCount = 0;
 
         for (final JobThread thread : threads) {
             threadCountByState.computeIfAbsent(thread.getJobState(), s -> new LinkedList<>()).add(thread.getName());
             consumedMessagesCount += thread.jobStatistics.getConsumedMessagesCount();
             producedMessagesCount += thread.jobStatistics.getProducedMessagesCount();
+            asyncJobsCount += thread.job.getAsyncTasksCount();
         }
 
-        return format("Produced: %8d, consumed: %8d, jobs: %s",
+        return format("Produced: %8d, consumed: %8d, %sjobs: %s",
                 producedMessagesCount,
                 consumedMessagesCount,
+                asyncJobsCount == 0 ? "" : format("async tasks: %8d, ", asyncJobsCount),
                 threadCountByState.entrySet().stream()
                         .map(e -> format("%s %s %s", e.getValue().size(), e.getKey(), e.getValue()))
                         .collect(joining(", ")));

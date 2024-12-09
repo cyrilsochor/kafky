@@ -1,8 +1,8 @@
 package io.github.cyrilsochor.kafky.core.kafka;
 
-import io.github.cyrilsochor.kafky.core.util.FixedSizeMap;
 import org.apache.kafka.clients.producer.Partitioner;
 import org.apache.kafka.clients.producer.RoundRobinPartitioner;
+import org.apache.kafka.clients.producer.internals.DefaultPartitioner;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.utils.Utils;
@@ -11,18 +11,22 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The balanced partitioner uses "Round-Robin" algorithm using all partitions of
- * the topic (standard RoundRobinPartitioner uses only available partitions).
+ * the topic. MODIFIED TO WORK PROPERLY WITH STICKY PARTITIONING (KIP-480) -
+ * USING <a href="https://github.com/apache/kafka/pull/11326">FIX</a>.
  * 
  * This partitioning strategy can be used when user wants to distribute the
  * writes to all partitions equally. This is the behaviour regardless of record
  * key hash.
  *
+ * @see DefaultPartitioner
  * @see RoundRobinPartitioner
  */
 public class BalancedPartitioner implements Partitioner {
@@ -30,7 +34,7 @@ public class BalancedPartitioner implements Partitioner {
     private static final Logger LOG = LoggerFactory.getLogger(BalancedPartitioner.class);
 
     protected final ConcurrentMap<String, AtomicInteger> topicCounterMap = new ConcurrentHashMap<>();
-    protected final Map<Integer, Integer> partitionCache = new FixedSizeMap<>(100);
+    protected final ConcurrentMap<String, Queue<Integer>> topicPartitionQueueMap = new ConcurrentHashMap<>();
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -53,29 +57,67 @@ public class BalancedPartitioner implements Partitioner {
      *            The current cluster metadata
      */
     @Override
-    public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
-        // this method is called by kafka multiple times with same parameters -> the result must be cached in partitionCache
-
-        final int partition;
-        if (valueBytes == null) {
-            partition = computeNext(topic, cluster);
+    public int partition(
+            String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
+        Queue<Integer> partitionQueue = partitionQueueComputeIfAbsent(topic);
+        Integer queuedPartition = partitionQueue.poll();
+        if (queuedPartition != null) {
+            LOG.trace("Partition chosen from queue: {}", queuedPartition);
+            return queuedPartition;
         } else {
-            partition = partitionCache.computeIfAbsent(System.identityHashCode(valueBytes), t -> computeNext(topic, cluster));
+            List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+            int numPartitions = partitions.size();
+            int nextValue = nextValue(topic);
+            List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
+            if (!availablePartitions.isEmpty()) {
+                int part = Utils.toPositive(nextValue) % availablePartitions.size();
+                int partition = availablePartitions.get(part).partition();
+                LOG.trace("Partition chosen: {}", partition);
+                return partition;
+            } else {
+                // no partitions are available, give a non-available partition
+                return Utils.toPositive(nextValue) % numPartitions;
+            }
         }
+    }
 
-        LOG.debug("Computed partition: {}", partition);
-        return partition;
+    private int nextValue(String topic) {
+        AtomicInteger counter = topicCounterMap.computeIfAbsent(
+                topic,
+                k -> {
+                    return new AtomicInteger(0);
+                });
+        return counter.getAndIncrement();
+    }
+
+    private Queue<Integer> partitionQueueComputeIfAbsent(String topic) {
+        return topicPartitionQueueMap.computeIfAbsent(topic, k -> {
+            return new ConcurrentLinkedQueue<>();
+        });
     }
 
     @Override
     public void close() {
     }
 
-    protected int computeNext(String topic, Cluster cluster) {
-        final List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
-        return Utils.toPositive(topicCounterMap.computeIfAbsent(topic, i -> new AtomicInteger(0))
-                .getAndIncrement())
-                % partitions.size();
+    /**
+     * Notifies the partitioner a new batch is about to be created. When using
+     * the sticky partitioner, this method can change the chosen sticky
+     * partition for the new batch.
+     *
+     * @param topic
+     *            The topic name
+     * @param cluster
+     *            The current cluster metadata
+     * @param prevPartition
+     *            The partition previously selected for the record that
+     *            triggered a new batch
+     */
+    @Override
+    public void onNewBatch(String topic, Cluster cluster, int prevPartition) {
+        LOG.trace("New batch so enqueuing partition {} for topic {}", prevPartition, topic);
+        Queue<Integer> partitionQueue = partitionQueueComputeIfAbsent(topic);
+        partitionQueue.add(prevPartition);
     }
 
 }

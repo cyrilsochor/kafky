@@ -1,5 +1,6 @@
 package io.github.cyrilsochor.kafky.core.global;
 
+import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getBoolean;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getIntegerRequired;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLongRequired;
 import static java.lang.String.format;
@@ -61,13 +62,16 @@ public class KafkyExecutor implements ExecutorService, Component {
                 getIntegerRequired(cfg, KafkyExecutorConfig.CORE_POOL_SIZE),
                 getIntegerRequired(cfg, KafkyExecutorConfig.MAXIMUM_POOL_SIZE),
                 getLongRequired(cfg, KafkyExecutorConfig.KEEP_ALIVE_TIME),
-                getIntegerRequired(cfg, KafkyExecutorConfig.WORK_QUEUE_SIZE));
+                getIntegerRequired(cfg, KafkyExecutorConfig.WORK_QUEUE_SIZE),
+                getBoolean(cfg, KafkyExecutorConfig.ALLOW_CORE_THREAD_TIME_OUT)
+        );
     }
 
     protected final int corePoolSize;
     protected final int maximumPoolSize;
     protected final long keepAliveTime;
     protected final int workQueueSize;
+    protected final Boolean allowCoreThreadTimeOut;
 
     // nullable
     protected ThreadPoolExecutor delegate;
@@ -78,11 +82,13 @@ public class KafkyExecutor implements ExecutorService, Component {
     protected KafkyExecutor(final int corePoolSize,
             final int maximumPoolSize,
             final long keepAliveTime,
-            final int workQueueSize) {
+            final int workQueueSize,
+            final Boolean allowCoreThreadTimeOut) {
         this.corePoolSize = corePoolSize;
         this.maximumPoolSize = maximumPoolSize;
         this.keepAliveTime = keepAliveTime;
         this.workQueueSize = workQueueSize;
+        this.allowCoreThreadTimeOut = allowCoreThreadTimeOut;
         this.counter = LOG.isDebugEnabled() ? new AtomicLong() : null;
     }
 
@@ -94,6 +100,9 @@ public class KafkyExecutor implements ExecutorService, Component {
                 keepAliveTime,
                 MILLISECONDS,
                 new ArrayBlockingQueue<Runnable>(workQueueSize));
+        if (allowCoreThreadTimeOut != null) {
+            delegate.allowCoreThreadTimeOut(allowCoreThreadTimeOut);
+        }
     }
 
     @Override

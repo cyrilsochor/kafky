@@ -9,7 +9,6 @@ import static io.github.cyrilsochor.kafky.core.util.Assert.assertNotNull;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
 import static io.github.cyrilsochor.kafky.core.util.ComponentUtils.createImplementation;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.addProperties;
-import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getClassRequired;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
 
@@ -23,6 +22,7 @@ import io.github.cyrilsochor.kafky.core.report.Report;
 import io.github.cyrilsochor.kafky.core.runtime.job.consumer.ConsumerJob;
 import io.github.cyrilsochor.kafky.core.runtime.job.producer.ProducerJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
+import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -147,17 +147,23 @@ public class KafkyRuntime implements RuntimeStatus {
                     .addArgument(componentId)
                     .addArgument(new ConfigLogSupplier(componentCfg))
                     .log();
-            final Class<? extends Component> componentClass = getClassRequired(componentCfg, Component.class, KafkyComponentConfig.CLASS);
+            final Class<? extends Component> componentClass = PropertiesUtils.getClass(componentCfg, Component.class, KafkyComponentConfig.CLASS);
+            if (componentClass == null) {
+                LOG.info("Component {} is not created, '{}' is not configured", componentId, KafkyComponentConfig.CLASS);
+                continue;
+            }
             final Component component = createImplementation(
                     "global",
                     componentClass,
                     List.of(
                             new ImplementationParameter(Map.class, componentCfg),
                             new ImplementationParameter(KafkyRuntime.class, this)));
-            if (component != null) {
-                report.report("Component %s CREATED: %s", componentId, component.getComponentInfo());
-                globalComponents.put(componentId, component);
+            if (component == null) {
+                LOG.info("Component {} is not created, 'null' is reurned by factory method of the class {}", componentId, componentClass.getClass());
+                continue;
             }
+            report.report("Component %s CREATED: %s", componentId, component.getComponentInfo());
+            globalComponents.put(componentId, component);
         }
     }
 

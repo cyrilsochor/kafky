@@ -38,6 +38,7 @@ public class BalancedPartitioner implements Partitioner {
 
     @Override
     public void configure(Map<String, ?> configs) {
+        // noting to do
     }
 
     /**
@@ -59,16 +60,16 @@ public class BalancedPartitioner implements Partitioner {
     @Override
     public int partition(
             String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
-        Queue<Integer> partitionQueue = partitionQueueComputeIfAbsent(topic);
-        Integer queuedPartition = partitionQueue.poll();
+        final Queue<Integer> partitionQueue = partitionQueueComputeIfAbsent(topic);
+        final Integer queuedPartition = partitionQueue.poll();
         if (queuedPartition != null) {
             LOG.trace("Partition chosen from queue: {}", queuedPartition);
             return queuedPartition;
         } else {
-            List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
-            int numPartitions = partitions.size();
-            int nextValue = nextValue(topic);
-            List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
+            final List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+            final int numPartitions = partitions.size();
+            final int nextValue = nextValue(topic);
+            final List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
             if (!availablePartitions.isEmpty()) {
                 int part = Utils.toPositive(nextValue) % availablePartitions.size();
                 int partition = availablePartitions.get(part).partition();
@@ -81,23 +82,20 @@ public class BalancedPartitioner implements Partitioner {
         }
     }
 
-    private int nextValue(String topic) {
-        AtomicInteger counter = topicCounterMap.computeIfAbsent(
+    protected int nextValue(String topic) {
+        final AtomicInteger counter = topicCounterMap.computeIfAbsent(
                 topic,
-                k -> {
-                    return new AtomicInteger(0);
-                });
+                k -> new AtomicInteger(0));
         return counter.getAndIncrement();
     }
 
-    private Queue<Integer> partitionQueueComputeIfAbsent(String topic) {
-        return topicPartitionQueueMap.computeIfAbsent(topic, k -> {
-            return new ConcurrentLinkedQueue<>();
-        });
+    protected Queue<Integer> partitionQueueComputeIfAbsent(String topic) {
+        return topicPartitionQueueMap.computeIfAbsent(topic, k -> new ConcurrentLinkedQueue<>());
     }
 
     @Override
     public void close() {
+        // noting to do
     }
 
     /**
@@ -112,11 +110,14 @@ public class BalancedPartitioner implements Partitioner {
      * @param prevPartition
      *            The partition previously selected for the record that
      *            triggered a new batch
+     * @deprecated
      */
     @Override
+    @Deprecated(forRemoval = true, since = "kafka-3.3.0")
+    @SuppressWarnings("java:S1133")
     public void onNewBatch(String topic, Cluster cluster, int prevPartition) {
         LOG.trace("New batch so enqueuing partition {} for topic {}", prevPartition, topic);
-        Queue<Integer> partitionQueue = partitionQueueComputeIfAbsent(topic);
+        final Queue<Integer> partitionQueue = partitionQueueComputeIfAbsent(topic);
         partitionQueue.add(prevPartition);
     }
 

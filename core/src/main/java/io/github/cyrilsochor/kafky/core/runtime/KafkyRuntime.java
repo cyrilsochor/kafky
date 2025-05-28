@@ -5,6 +5,7 @@ import static io.github.cyrilsochor.kafky.api.job.JobState.INITIALIZING;
 import static io.github.cyrilsochor.kafky.api.job.JobState.STATE_COMPARATOR;
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_CONSUMER_CONFIGURATION;
 import static io.github.cyrilsochor.kafky.core.config.KafkyDefaults.DEFAULT_PRODUCER_CONFIGURATION;
+import static io.github.cyrilsochor.kafky.core.report.Report.MESSAGES_COUNT_FORMAT;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertNotNull;
 import static io.github.cyrilsochor.kafky.core.util.Assert.assertTrue;
 import static io.github.cyrilsochor.kafky.core.util.ComponentUtils.createImplementation;
@@ -30,6 +31,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -38,6 +40,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
@@ -54,14 +57,18 @@ public class KafkyRuntime implements RuntimeStatus {
         public void run() {
             if (exitStatus == null) {
 
-                int cancelingCount = 0;
-                for (final JobThread thread : threads) {
-                    if (!thread.getJobState().isFinite()) {
-                        thread.setJobState(CANCELING);
-                        cancelingCount++;
-                    }
-                }
-                LOG.info("Shutdown - canceling {} jobs", cancelingCount);
+                final AtomicInteger cancelingCount = new AtomicInteger();
+                threads.stream()
+                        .sorted(Comparator.<JobThread>comparingInt(t -> ProducerJob.class.equals(t.job.getClass()) ? 0 : 1) // cancel producer jobs before consumer jobs
+                                        .thenComparing(t -> t.job.getId()))
+                        .forEach(thread -> {
+                            if (!thread.getJobState().isFinite()) {
+                                thread.setJobState(CANCELING);
+                                cancelingCount.incrementAndGet();
+                            }
+                        });
+
+                LOG.info("Shutdown - canceling {} jobs", cancelingCount.get());
 
                 for (int i = 0; i < 10; i++) {
                     if (exitStatus != null) {
@@ -233,13 +240,27 @@ public class KafkyRuntime implements RuntimeStatus {
             asyncJobsCount += thread.job.getAsyncTasksCount();
         }
 
-        return format("Produced: %8d, consumed: %8d, %sjobs: %s",
+        final StringBuilder other = new StringBuilder();
+        if (asyncJobsCount != 0) {
+            other.append(format(", async tasks: " + MESSAGES_COUNT_FORMAT, asyncJobsCount));
+        }
+        for (final Component c : globalComponents.values()) {
+            final String cr = c.getReport();
+            if (cr != null) {
+                other.append(", ");
+                other.append(cr);
+            }
+        }
+
+        final String jobsStates = threadCountByState.entrySet().stream()
+                .map(e -> format("%s %s %s", e.getValue().size(), e.getKey(), e.getValue()))
+                .collect(joining(", "));
+
+        return format("Produced: " + MESSAGES_COUNT_FORMAT + ", consumed: " + MESSAGES_COUNT_FORMAT + "%s, jobs: %s",
                 producedMessagesCount,
                 consumedMessagesCount,
-                asyncJobsCount == 0 ? "" : format("async tasks: %8d, ", asyncJobsCount),
-                threadCountByState.entrySet().stream()
-                        .map(e -> format("%s %s %s", e.getValue().size(), e.getKey(), e.getValue()))
-                        .collect(joining(", ")));
+                other.toString(),
+                jobsStates);
     }
 
     public Report getReport() {

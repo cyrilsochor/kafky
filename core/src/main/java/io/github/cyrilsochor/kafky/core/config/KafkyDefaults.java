@@ -16,11 +16,13 @@ public class KafkyDefaults {
             KafkyConsumerConfig.RECORD_CONSUMERS_PACKAGES, List.of(StorageRecordConsumer.class.getPackage().getName()),
             KafkyConsumerConfig.PROPERITES, Map.of(
                     "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"),
-            KafkyConsumerConfig.SKIP_WARM_UP, true);
+            KafkyConsumerConfig.OBSERVE, true);
 
     public static final Map<Object, Object> DEFAULT_PRODUCER_CONFIGURATION = Map.of(
             KafkyProducerConfig.MESSAGES_COUNT, 1l,
             KafkyProducerConfig.WARM_UP_PERCENT, 20,
+            KafkyProducerConfig.MEASURE_RESPONSE_TIME_PERCENT, 5,
+            KafkyProducerConfig.MEASURE_RESPONSE_TIME_DELAY, 100,
             KafkyProducerConfig.RECORD_PRODUCERS_PACKAGES, List.of(TemplateRecordProducer.class.getPackage().getName()),
             KafkyProducerConfig.PROPERITES, Map.of(
                     "key.serializer", "org.apache.kafka.common.serialization.StringSerializer"),

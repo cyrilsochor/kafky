@@ -2,6 +2,13 @@ package io.github.cyrilsochor.kafky.core.util;
 
 public class InfoUtils {
 
+    public static void appendSentence(final StringBuilder sb, final String sentence) {
+        if (!sb.isEmpty()) {
+            sb.append(", ");
+        }
+        sb.append(sentence);
+    }
+
     public static void appendFieldValue(final StringBuilder sb, final String fieldName, final Object value) {
         appendFieldKey(sb, fieldName);
         if (value == null) {

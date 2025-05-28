@@ -2,12 +2,12 @@ package io.github.cyrilsochor.kafky.core.runtime.job.producer;
 
 import static io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig.MESSAGES_COUNT;
 import static io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig.WARM_UP_PERCENT;
+import static io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig.MEASURE_RESPONSE_TIME_PERCENT;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.go;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.produced;
 import static io.github.cyrilsochor.kafky.core.runtime.IterationResult.stop;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldKey;
 import static io.github.cyrilsochor.kafky.core.util.InfoUtils.appendFieldValue;
-import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLong;
 import static io.github.cyrilsochor.kafky.core.util.PropertiesUtils.getLongRequired;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
 
@@ -73,16 +73,15 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
                 null);
 
         final long totalCount = getLongRequired(cfg, MESSAGES_COUNT);
-        final Long warmUpPercent = getLong(cfg, WARM_UP_PERCENT);
-        if (warmUpPercent == null) {
-            job.warmUpCount = 0l;
-            job.testCount = totalCount;
-        } else {
-            job.warmUpCount = totalCount * warmUpPercent / 100;
-            job.testCount = totalCount - job.warmUpCount;
-        }
+        final long warmUpPercent = getLongRequired(cfg, WARM_UP_PERCENT);
+        final long measureResponseTimePercent = getLongRequired(cfg, MEASURE_RESPONSE_TIME_PERCENT);
+        job.warmUpCount = totalCount * warmUpPercent / 100;
+        job.measureResponseTimeCount = totalCount * measureResponseTimePercent / 100;
+        job.measureThroughputCount = totalCount - job.warmUpCount - job.measureResponseTimeCount;
 
-        job.delay = PropertiesUtils.getDuration(cfg, KafkyProducerConfig.DELAY);
+        job.warmUpDelay = PropertiesUtils.getDuration(cfg, KafkyProducerConfig.WARM_UP_DELAY);
+        job.measureResponseTimeDelay = PropertiesUtils.getDuration(cfg, KafkyProducerConfig.MEASURE_RESPONSE_TIME_DELAY);
+        job.measureThroughputDelay = PropertiesUtils.getDuration(cfg, KafkyProducerConfig.MEASURE_THROUGHPUT_DELAY);
 
         return job;
     }
@@ -90,14 +89,17 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
     protected Properties kafkaProducerProperties;
 
     protected long warmUpCount;
-    protected long testCount;
+    protected long measureResponseTimeCount;
+    protected long measureThroughputCount;
 
     protected boolean initialized;
     protected RecordProducer recordProducer;
 
     protected KafkaProducer<Object, Object> kafkaProducer;
 
-    protected Duration delay;
+    protected Duration warmUpDelay;
+    protected Duration measureResponseTimeDelay;
+    protected Duration measureThroughputDelay;
 
     protected long messageSendSeq;
     protected long messageLogSeq;
@@ -105,7 +107,8 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
     protected List<ProducedRecordListener> listeners;
 
     protected LinkedList<ProducerRecord<Object, Object>> warmUpRecors = new LinkedList<>();
-    protected LinkedList<ProducerRecord<Object, Object>> testRecors = new LinkedList<>();
+    protected LinkedList<ProducerRecord<Object, Object>> measureResponseTimeRecors = new LinkedList<>();
+    protected LinkedList<ProducerRecord<Object, Object>> measureThroughputRecors = new LinkedList<>();
 
     protected final Deque<Future<?>> futures = new ConcurrentLinkedDeque<>();
 
@@ -130,11 +133,13 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
 
         if (warmUpRecors.size() < warmUpCount) {
             warmUpRecors.add(message);
+        } else if (measureResponseTimeRecors.size() < measureResponseTimeCount) {
+            measureResponseTimeRecors.add(message);
         } else {
-            testRecors.add(message);
+            measureThroughputRecors.add(message);
         }
 
-        if (testRecors.size() < testCount) {
+        if (measureThroughputRecors.size() < measureThroughputCount) {
             return go();
         } else {
             finishAllFutures();
@@ -150,17 +155,20 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
 
     @Override
     public IterationResult warmUp() throws Exception {
+        delay(warmUpDelay);
         return sendOneMessage(warmUpRecors);
     }
 
     @Override
-    public IterationResult run() throws Exception {
+    public IterationResult measureResponseTime() throws Exception {
+        delay(measureResponseTimeDelay);
+        return sendOneMessage(measureResponseTimeRecors);
+    }
 
-        if (delay != null) {
-            parkNanos(delay.toNanos());
-        }
-
-        return sendOneMessage(testRecors);
+    @Override
+    public IterationResult measureThroughput() throws Exception {
+        delay(measureThroughputDelay);
+        return sendOneMessage(measureThroughputRecors);
     }
 
     protected IterationResult sendOneMessage(LinkedList<ProducerRecord<Object, Object>> recors) {
@@ -212,7 +220,8 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
         final StringBuilder info = new StringBuilder();
 
         appendFieldValue(info, "warm-up-count", warmUpCount);
-        appendFieldValue(info, "test-count", testCount);
+        appendFieldValue(info, "measure-response-time-count", measureResponseTimeCount);
+        appendFieldValue(info, "measure-throughput-count", measureThroughputCount);
 
         RecordProducer p = recordProducer;
         for (int pi = 0; p != null; pi++) {
@@ -248,6 +257,12 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
     @Override
     public long getAsyncTasksCount() {
         return futures.size();
+    }
+
+    protected void delay(/*nullable*/ final Duration duration) {
+        if (duration != null) {
+            parkNanos(duration.toNanos());
+        }
     }
 
 }

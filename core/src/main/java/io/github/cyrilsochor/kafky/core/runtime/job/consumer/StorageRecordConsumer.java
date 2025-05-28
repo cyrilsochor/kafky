@@ -25,12 +25,14 @@ public class StorageRecordConsumer extends AbstractRecordConsumer {
 
         LOG.info("Writing consumed messages log to {}", outputPath.toAbsolutePath());
 
-        return new StorageRecordConsumer(new StorageSerializer(new TextWriter(outputPath)));
+        return new StorageRecordConsumer("file " + outputPath.toAbsolutePath().toString(), new StorageSerializer(new TextWriter(outputPath)));
     }
 
-    final StorageSerializer storageSerializer;
+    private final String componentInfo;
+    private final StorageSerializer storageSerializer;
 
-    public StorageRecordConsumer(final StorageSerializer storageSerializer) {
+    public StorageRecordConsumer(final String componentInfo, final StorageSerializer storageSerializer) {
+        this.componentInfo = componentInfo;
         this.storageSerializer = storageSerializer;
     }
 
@@ -56,6 +58,11 @@ public class StorageRecordConsumer extends AbstractRecordConsumer {
         storageSerializer.close();
         LOG.debug("Close finish");
         super.close();
+    }
+
+    @Override
+    public String getComponentInfo() {
+        return super.getComponentInfo() + "-> " + componentInfo;
     }
 
 }

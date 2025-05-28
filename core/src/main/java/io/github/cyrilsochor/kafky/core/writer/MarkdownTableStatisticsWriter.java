@@ -1,6 +1,8 @@
 package io.github.cyrilsochor.kafky.core.writer;
 
-import static io.github.cyrilsochor.kafky.core.writer.StatisticsWriter.Flag.*;
+import static io.github.cyrilsochor.kafky.core.writer.StatisticsWriter.Flag.ALIGN_CENTER;
+import static io.github.cyrilsochor.kafky.core.writer.StatisticsWriter.Flag.ALIGN_LEFT;
+import static io.github.cyrilsochor.kafky.core.writer.StatisticsWriter.Flag.ALIGN_RIGHT;
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
 import static java.time.temporal.ChronoField.HOUR_OF_DAY;
 import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
@@ -16,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -26,6 +29,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -35,7 +39,7 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
 
     private static final CharSequence RECORD_SEPARATOR = "\n";
     private static final CharSequence FIELD_SEPARATOR = "|";
-    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("# ###");
+    private static final DecimalFormat DECIMAL_FORMAT;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = new DateTimeFormatterBuilder() // like ISO_DATE_TIME, truncate to 3 digit millis 
             .parseCaseInsensitive()
             .append(ISO_LOCAL_DATE)
@@ -49,6 +53,12 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
             .optionalStart()
             .appendFraction(NANO_OF_SECOND, 3, 3, true)
             .toFormatter();
+
+    static {
+        final DecimalFormatSymbols formatSymbols = new DecimalFormatSymbols(Locale.ENGLISH);
+        formatSymbols.setGroupingSeparator(' ');
+        DECIMAL_FORMAT = new DecimalFormat("#,###.#", formatSymbols);
+    }
 
     protected final Path path;
 

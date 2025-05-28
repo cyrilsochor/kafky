@@ -24,7 +24,7 @@ public interface Job {
         return IterationResult.stop();
     }
 
-    default boolean skipWarmUp() {
+    default boolean isObserve() {
         return false;
     }
 
@@ -32,7 +32,15 @@ public interface Job {
         return IterationResult.stop();
     }
 
-    default IterationResult run() throws Exception {
+    default IterationResult measureResponseTime() throws Exception {
+        return IterationResult.stop();
+    }
+
+    default IterationResult measureThroughput() throws Exception {
+        return IterationResult.stop();
+    }
+
+    default IterationResult observe() throws Exception {
         return IterationResult.stop();
     }
 

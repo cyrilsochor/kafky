@@ -1,7 +1,5 @@
 package io.github.cyrilsochor.kafky.core.runtime.job.consumer;
 
-import static io.github.cyrilsochor.kafky.api.job.JobState.WARMED;
-
 import io.github.cyrilsochor.kafky.api.job.consumer.AbstractRecordConsumer;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.core.config.KafkyConsumerConfig;
@@ -49,8 +47,7 @@ public class PairResponseMarker extends AbstractRecordConsumer {
         final Header header = consumerRecord.headers().lastHeader(headerKey);
         if (header != null) {
             final String key = new String(header.value());
-            final boolean warmup = runtime.getMinProducerState().ordinal() <= WARMED.ordinal();
-            pairMatcher.addResponse(key, consumerRecord, warmup);
+            pairMatcher.addResponse(key, consumerRecord, jobStatus.getState());
         }
 
         getChainNext().consume(consumerRecord);

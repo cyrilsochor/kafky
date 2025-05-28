@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 public class Report {
 
     private static final Logger LOG = LoggerFactory.getLogger(Report.class);
+    public static final String MESSAGES_COUNT_FORMAT = "%8d";
     protected static final DateTimeFormatter CONSOLE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public static Report of(Properties cfg) {

@@ -44,19 +44,28 @@ public class JobThread extends Thread {
                 iterate("prepare", j -> j.prepare(), PREPARING, PREPARED);
 
                 thread.runtime.waitForAllAtLeast(PREPARED);
-                
+
                 iterate("start", j -> j.start(), STARTING, STARTED);
 
                 thread.runtime.waitForAllAtLeast(STARTED);
 
-                if (!thread.job.skipWarmUp()) {
-                iterate("warmup", j -> j.warmUp(), WARMUP, WARMED);
+                if (thread.job.isObserve()) {
 
-                thread.runtime.waitForAllAtLeast(WARMED);
-            }
+                    iterate("observe", j -> j.observe(), OBSERVING, SUCCESS);
 
-                iterate("run", j -> j.run(), RUNNING, SUCCESS);
+                } else {
 
+                    iterate("warmup", j -> j.warmUp(), WARMUP, WARMED);
+
+                    thread.runtime.waitForAllAtLeast(WARMED);
+
+                    iterate("measure-response-time", j -> j.measureResponseTime(), MEASURING_RESPONSE_TIME, MEASURED_RESPONSE_TIME);
+
+                    thread.runtime.waitForAllAtLeast(MEASURED_RESPONSE_TIME);
+
+                    iterate("measure-throughput", j -> j.measureThroughput(), MEASURING_THROUGHPUT, SUCCESS);
+
+                }
             } catch (Exception e) {
                 thread.setJobState(FAILED);
                 thread.runtime.getReport().reportException(e, "Job %s FAILED", thread.job.getId());
@@ -76,16 +85,22 @@ public class JobThread extends Thread {
                 final String phase,
                 final Iteration iteration,
                 final JobState startState,
-                final JobState finalState) throws Exception {
-            LOG.debug("Running job {} phase {}", thread.job.getId(), phase);
+                final JobState finishState) throws Exception {
+            final JobState actualState = thread.setJobState(startState);
+            if (actualState != startState) {
+                thread.setJobState(CANCELED);
+                LOG.debug("Skipping job {} phase {} because state is {}", thread.job.getId(), phase, actualState);
+                return;
+            }
 
-            thread.setJobState(startState);
+            LOG.debug("Running job {} phase {}", thread.job.getId(), phase);
 
             int iterationSeq = 0;
             boolean last = false;
             while (!last) {
                 if (thread.getJobState() == CANCELING) {
                     thread.setJobState(CANCELED);
+                    LOG.debug("Canceled job {} in {} iteration #{}", thread.job.getId(), phase, iterationSeq);
                     last = true;
                 } else {
                     LOG.debug("Execution job {} {} iteration #{}", thread.job.getId(), phase, iterationSeq);
@@ -95,7 +110,7 @@ public class JobThread extends Thread {
                     thread.jobStatistics.incrementConsumedRecordsCount(result.consumendMessagesCount());
                     thread.jobStatistics.incrementProducesRecordsCount(result.producedMessagesCount());
                     if (last) {
-                        thread.setJobState(finalState);
+                        thread.setJobState(finishState);
                     }
                 }
                 iterationSeq++;
@@ -117,8 +132,11 @@ public class JobThread extends Thread {
         return job.getState();
     }
 
-    public void setJobState(final JobState state) {
-        job.setState(state);
+    public JobState setJobState(final JobState state) {
+        if (job.getState().compareTo(state) < 0) { // don't allow state decrease, e.g: CANCELING -> WARMUP
+            job.setState(state);
+        }
+        return job.getState();
     }
 
     public void shutdownHook() {

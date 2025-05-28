@@ -107,7 +107,9 @@ public class KafkyExecutor implements ExecutorService, Component {
 
     @Override
     public void close() throws Exception {
-        delegate.shutdown();
+        if (delegate != null) {
+            delegate.shutdown();
+        }
     }
 
     protected Long nextSequence() {

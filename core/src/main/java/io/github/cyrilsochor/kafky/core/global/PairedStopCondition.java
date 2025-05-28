@@ -1,8 +1,5 @@
 package io.github.cyrilsochor.kafky.core.global;
 
-import static io.github.cyrilsochor.kafky.api.job.JobState.RUNNING;
-import static io.github.cyrilsochor.kafky.api.job.JobState.WARMUP;
-
 import io.github.cyrilsochor.kafky.api.job.JobState;
 import io.github.cyrilsochor.kafky.api.job.consumer.ConsumerJobStatus;
 import io.github.cyrilsochor.kafky.api.job.consumer.StopCondition;
@@ -33,16 +30,10 @@ public class PairedStopCondition implements StopCondition {
             }
         }
 
+        // check all producers are complete
         final JobState minProducerState = runtime.getMinProducerState();
-        final boolean stop;
-        if (status.getState() == WARMUP) {
-            // producers may be in states: WARMUP, WARMED
-            stop = minProducerState.ordinal() > JobState.WARMUP.ordinal();
-        } else {
-            // producers may be in states: RUNNING, SUCCESS, FAILURE
-            stop = minProducerState.ordinal() > RUNNING.ordinal();
-        }
-
+        final boolean stop = minProducerState.ordinal() > status.getState().ordinal();
+            
         LOG.debug("Stop {} (minProducerState {})", stop, minProducerState);
         return stop;
     }

@@ -15,4 +15,9 @@ public interface Component {
         return this.getClass().getSimpleName();
     }
 
+    // nullable
+    default String getReport() {
+        return null;
+    }
+
 }

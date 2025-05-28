@@ -70,7 +70,7 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
         job.stopCondition = customStopConditionId != null ? runtime.getGlobalComponent(customStopConditionId, StopCondition.class)
                 : new NeverStopCondition();
 
-        job.skipWarmUp = PropertiesUtils.getBooleanRequired(cfg, KafkyConsumerConfig.SKIP_WARM_UP);
+        job.observe = PropertiesUtils.getBooleanRequired(cfg, KafkyConsumerConfig.OBSERVE);
 
         job.topics = new LinkedList<>();
         job.assignments = new LinkedList<>();
@@ -112,7 +112,7 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
 
     protected long consumedMessagesCount;
 
-    protected boolean skipWarmUp;
+    protected boolean observe;
     protected Function<ConsumerJobStatus, Boolean> stopCondition;
     protected long pollTimeout = 1000;
 
@@ -156,8 +156,8 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     }
 
     @Override
-    public boolean skipWarmUp() {
-        return skipWarmUp;
+    public boolean isObserve() {
+        return observe;
     }
 
     @Override
@@ -166,7 +166,17 @@ public class ConsumerJob extends AbstractJob implements Job, ConsumerJobStatus {
     }
 
     @Override
-    public IterationResult run() throws Exception {
+    public IterationResult measureResponseTime() throws Exception {
+        return iterate();
+    }
+
+    @Override
+    public IterationResult measureThroughput() throws Exception {
+        return iterate();
+    }
+
+    @Override
+    public IterationResult observe() throws Exception {
         return iterate();
     }
 

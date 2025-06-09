@@ -13,12 +13,13 @@ import com.ezylang.evalex.EvaluationException;
 import com.ezylang.evalex.Expression;
 import com.ezylang.evalex.config.ExpressionConfiguration;
 import com.ezylang.evalex.data.EvaluationValue;
-import com.ezylang.evalex.functions.FunctionIfc;
 import com.ezylang.evalex.parser.ParseException;
 import io.github.cyrilsochor.kafky.api.job.producer.AbstractRecordProducer;
 import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
 import io.github.cyrilsochor.kafky.core.exception.ExpressionEvaluationException;
+import io.github.cyrilsochor.kafky.core.global.ExpressionEngine;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.commons.collections4.MapUtils;
@@ -33,7 +34,6 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -47,24 +47,23 @@ public class ExpressionDecorator extends AbstractRecordProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(ExpressionDecorator.class);
 
-    public static RecordProducer of(final Map<Object, Object> cfg) throws InstantiationException, IllegalAccessException, IllegalArgumentException,
+    public static RecordProducer of(final Map<Object, Object> cfg, final KafkyRuntime runtime)
+            throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
         final Map<Object, Object> decorateHeaders = PropertiesUtils.getMap(cfg, KafkyProducerConfig.DECORATE_HEADERS);
         final Map<Object, Object> decorateValue = PropertiesUtils.getMap(cfg, KafkyProducerConfig.DECORATE_VALUE);
         if (MapUtils.isEmpty(decorateHeaders) && MapUtils.isEmpty(decorateValue)) {
             return null;
         } else {
-            final List<Entry<String, FunctionIfc>> additionalFunctions = getCustomFunctions(
-                    PropertiesUtils.getMap(cfg, KafkyProducerConfig.EXPRESSION_FUNCTIONS));
-            final ExpressionConfiguration expressionConfiguration = ExpressionConfiguration.builder()
-                    .dateTimeFormatters(List.of(DateTimeFormatter.ISO_INSTANT))
-                    .build()
-                    .withAdditionalFunctions(additionalFunctions.toArray(s -> new Entry[s]));
-            final Map<String, Expression> headerExpressions = decorateHeaders.entrySet().stream()
+            final ExpressionEngine expressionEngine = runtime.getGlobalComponentByType(ExpressionEngine.class);
+            final ExpressionConfiguration expressionConfiguration = expressionEngine.getExpressionConfiguration();
+            final Map<String, Expression> headerExpressions = decorateHeaders == null ? emptyMap()
+                    : decorateHeaders.entrySet().stream()
                     .collect(toMap(
                             e -> e.getKey().toString(),
                             e -> createExpression(expressionConfiguration, e.getValue().toString())));
-            final Map<List<String>, Expression> valueExpressions = decorateValue.entrySet().stream()
+            final Map<List<String>, Expression> valueExpressions = decorateValue == null ? emptyMap()
+                    : decorateValue.entrySet().stream()
                     .collect(toMap(
                             e -> createPath(e.getKey().toString()),
                             e -> createExpression(expressionConfiguration, e.getValue().toString())));
@@ -109,17 +108,6 @@ public class ExpressionDecorator extends AbstractRecordProducer {
         return Arrays.asList(pathString.split("\\."));
     }
 
-    protected static ArrayList<Entry<String, FunctionIfc>> getCustomFunctions(Map<Object, Object> cfgFunctions)
-            throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException,
-            SecurityException, ClassNotFoundException {
-        final ArrayList<Entry<String, FunctionIfc>> functions = new ArrayList<>();
-        for (Entry<Object, Object> f : cfgFunctions.entrySet()) {
-            final FunctionIfc function = Class.forName(f.getValue().toString()).asSubclass(FunctionIfc.class).getConstructor().newInstance();
-            functions.add(Map.entry(f.getKey().toString(), function));
-        }
-        return functions;
-    }
-
     protected final Map<Object, Object> cfg;
     protected final Map<String, Expression> headerExpressions;
     protected final Map<List<String>, Expression> valueExpressions;
@@ -151,7 +139,8 @@ public class ExpressionDecorator extends AbstractRecordProducer {
 
         final Object value = source.value();
         assertNotNull(value, "Expected non-null value");
-        assertTrue(value instanceof GenericRecord, "Expected value of class " + GenericRecord.class.getName());
+        assertTrue(value instanceof GenericRecord,
+                "Expected value of class " + GenericRecord.class.getName() + " but is " + value.getClass().getName());
         decorateValue((GenericRecord) value);
 
         final Headers headers = source.headers();
@@ -183,13 +172,12 @@ public class ExpressionDecorator extends AbstractRecordProducer {
             final List<String> path,
             final Expression expression) throws EvaluationException, ParseException {
         assertFalse(path.isEmpty(), "Expected non-empty path");
+        final String field = path.get(0);
         if (path.size() == 1) {
-            final String field = path.get(0);
             final Object oldValue = value.get(field);
             final Object newValue = evaluateValueExpression(expression, oldValue);
             value.put(field, newValue);
         } else {
-            final String field = path.get(0);
             final GenericRecord subValue = (GenericRecord) value.get(field);
             decorateValue(subValue, path.subList(1, path.size()), expression);
         }

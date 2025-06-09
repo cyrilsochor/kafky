@@ -7,8 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.cyrilsochor.kafky.api.job.producer.RecordProducer;
-import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
-import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
+import io.github.cyrilsochor.kafky.core.config.KafkyExpressionEngineConfig;
+import io.github.cyrilsochor.kafky.core.expression.funtion.NewB3Function;
+import io.github.cyrilsochor.kafky.core.expression.funtion.RandomLongFunction;
+import io.github.cyrilsochor.kafky.core.expression.funtion.RandomUUIDFunction;
+import io.github.cyrilsochor.kafky.core.expression.funtion.SizeFunction;
+import io.github.cyrilsochor.kafky.core.global.ExpressionEngine;
+import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.common.header.internals.RecordHeaders;
@@ -34,7 +39,13 @@ class HeaderDecoratorTest {
 
     @Test
     void emptyCfg() throws Exception {
-        assertNull(ExpressionDecorator.of(emptyMap()));
+        final ExpressionEngine expressionEngine = ExpressionEngine.of(emptyMap());
+        assertNull(ExpressionDecorator.of(emptyMap(), new KafkyRuntime() {
+            @Override
+            public <I> I getGlobalComponentByType(Class<? extends I> componentInterface) {
+                return (I) expressionEngine;
+            }
+        }));
     }
 
     @Test
@@ -184,9 +195,20 @@ class HeaderDecoratorTest {
 
     protected RecordProducer createHeaderDecorator(final Map<Object, Object> cfg, final ProducerRecord<Object, Object> sourceRecord)
             throws Exception {
-        final Map<Object, Object> fullCfg = new HashMap<>(cfg);
-        PropertiesUtils.addProperties(fullCfg, KafkyDefaults.DEFAULT_PRODUCER_CONFIGURATION);
-        final RecordProducer decorator = ExpressionDecorator.of(fullCfg);
+        final Map<Object, Object> fullCfg = new HashMap<>();
+        fullCfg.put(KafkyExpressionEngineConfig.CUSTOM_FUNCTIONS, Map.of(
+                "RANDOM_UUID", RandomUUIDFunction.class.getName(),
+                "RANDOM_LONG", RandomLongFunction.class.getName(),
+                "SIZE", SizeFunction.class.getName(),
+                "NEW_B3", NewB3Function.class.getName()
+        ));
+        final ExpressionEngine expressionEngine = ExpressionEngine.of(fullCfg);
+        final RecordProducer decorator = ExpressionDecorator.of(cfg, new KafkyRuntime() {
+            @Override
+            public <I> I getGlobalComponentByType(Class<? extends I> componentInterface) {
+                return (I) expressionEngine;
+            }
+        });
         assertNotNull(decorator);
         decorator.setChainNext(new ConstantRecordProducer(sourceRecord));
         decorator.init();

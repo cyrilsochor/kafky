@@ -20,10 +20,12 @@ import io.github.cyrilsochor.kafky.core.config.KafkyComponentConfig;
 import io.github.cyrilsochor.kafky.core.config.KafkyConfiguration;
 import io.github.cyrilsochor.kafky.core.config.KafkyDefaults;
 import io.github.cyrilsochor.kafky.core.report.Report;
+import io.github.cyrilsochor.kafky.core.report.Report.JobStatusFormat;
 import io.github.cyrilsochor.kafky.core.runtime.job.consumer.ConsumerJob;
 import io.github.cyrilsochor.kafky.core.runtime.job.producer.ProducerJob;
 import io.github.cyrilsochor.kafky.core.util.ComponentUtils.ImplementationParameter;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,6 +52,7 @@ public class KafkyRuntime implements RuntimeStatus {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkyRuntime.class);
     private static final String LOG_PROPERTIES_MSG = "{} {} properties:\n{}";
+    private static final Integer DEFAULT_PRIORITY = 100;
 
     protected class ShutdownHook implements Runnable {
 
@@ -60,7 +63,7 @@ public class KafkyRuntime implements RuntimeStatus {
                 final AtomicInteger cancelingCount = new AtomicInteger();
                 threads.stream()
                         .sorted(Comparator.<JobThread>comparingInt(t -> ProducerJob.class.equals(t.job.getClass()) ? 0 : 1) // cancel producer jobs before consumer jobs
-                                        .thenComparing(t -> t.job.getId()))
+                                .thenComparing(t -> t.job.getId()))
                         .forEach(thread -> {
                             if (!thread.getJobState().isFinite()) {
                                 thread.setJobState(CANCELING);
@@ -144,34 +147,59 @@ public class KafkyRuntime implements RuntimeStatus {
         report = Report.of(props);
     }
 
+    protected static class GlobalComponentDefinition {
+        private String id;
+        private Class<? extends Component> componentClass;
+        private int priority;
+        private Map<Object, Object> cfg;
+    }
+
     protected synchronized void createGlobalComponents(final KafkyConfiguration cfg) throws Exception {
-        for (final Map.Entry<Object, Object> componentEntry : cfg.components().entrySet()) {
-            final String componentId = (String) componentEntry.getKey();
-            final Map<Object, Object> componentCfg = new HashMap<>((Map<Object, Object>) componentEntry.getValue());
-            addProperties(componentCfg, cfg.global());
-            LOG.atDebug().setMessage(LOG_PROPERTIES_MSG)
-                    .addArgument("Global component")
-                    .addArgument(componentId)
-                    .addArgument(new ConfigLogSupplier(componentCfg))
-                    .log();
-            final Class<? extends Component> componentClass = PropertiesUtils.getClass(componentCfg, Component.class, KafkyComponentConfig.CLASS);
-            if (componentClass == null) {
-                LOG.info("Component {} is not created, '{}' is not configured", componentId, KafkyComponentConfig.CLASS);
-                continue;
-            }
-            final Component component = createImplementation(
-                    "global",
-                    componentClass,
-                    List.of(
-                            new ImplementationParameter(Map.class, componentCfg),
-                            new ImplementationParameter(KafkyRuntime.class, this)));
-            if (component == null) {
-                LOG.info("Component {} is not created, 'null' is reurned by factory method of the class {}", componentId, componentClass.getClass());
-                continue;
-            }
-            report.report("Component %s CREATED: %s", componentId, component.getComponentInfo());
-            globalComponents.put(componentId, component);
-        }
+        cfg.components().entrySet().stream()
+                .map(componentEntry -> {
+                    final GlobalComponentDefinition def = new GlobalComponentDefinition();
+
+                    def.id = (String) componentEntry.getKey();
+                    def.cfg = new HashMap<>((Map<Object, Object>) componentEntry.getValue());
+                    addProperties(def.cfg, cfg.global());
+                    LOG.atDebug().setMessage(LOG_PROPERTIES_MSG)
+                            .addArgument("Global component")
+                            .addArgument(def.id)
+                            .addArgument(new ConfigLogSupplier(def.cfg))
+                            .log();
+                    try {
+                        def.componentClass = PropertiesUtils.getClass(def.cfg, Component.class,
+                                KafkyComponentConfig.CLASS);
+                        if (def.componentClass == null) {
+                            LOG.warn("Component {} is not created, '{}' is not configured", def.id, KafkyComponentConfig.CLASS);
+                            return null;
+                        }
+                    } catch (ClassNotFoundException e) {
+                        throw new RuntimeException("Invalid global component " + def.id + " class", e);
+                    }
+                    def.priority = ObjectUtils.firstNonNull(PropertiesUtils.getInteger(def.cfg, KafkyComponentConfig.PRIORITY),
+                            DEFAULT_PRIORITY);
+                    return def;
+                })
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparingInt(d -> d.priority))
+                .forEach(def -> {
+                    final Component component = createImplementation(
+                            "global",
+                            def.componentClass,
+                            List.of(
+                                    new ImplementationParameter(Map.class, def.cfg),
+                                    new ImplementationParameter(KafkyRuntime.class, this)));
+                    if (component == null) {
+                        LOG.info("Component {} is not created, 'null' is reurned by factory method of the class {}",
+                                def.id,
+                                def.componentClass.getClass());
+                    } else {
+                        report.report("Component %s CREATED: %s", def.id, component.getComponentInfo());
+                        globalComponents.put(def.id, component);
+                    }
+                });
+        ;
     }
 
     protected synchronized void createJobs(final KafkyConfiguration cfg) throws Exception {
@@ -252,9 +280,16 @@ public class KafkyRuntime implements RuntimeStatus {
             }
         }
 
-        final String jobsStates = threadCountByState.entrySet().stream()
-                .map(e -> format("%s %s %s", e.getValue().size(), e.getKey(), e.getValue()))
-                .collect(joining(", "));
+        final String jobsStates;
+        if (report.getJobStatusFormat().ordinal() < JobStatusFormat.VERBOSE.ordinal()) {
+            jobsStates = threadCountByState.entrySet().stream()
+                    .map(e -> format("%s %s", e.getValue().size(), e.getKey()))
+                    .collect(joining(", "));
+        } else {
+            jobsStates = threadCountByState.entrySet().stream()
+                    .map(e -> format("%s %s %s", e.getValue().size(), e.getKey(), e.getValue()))
+                    .collect(joining(", "));
+        }
 
         return format("Produced: " + MESSAGES_COUNT_FORMAT + ", consumed: " + MESSAGES_COUNT_FORMAT + "%s, jobs: %s",
                 producedMessagesCount,
@@ -408,6 +443,12 @@ public class KafkyRuntime implements RuntimeStatus {
                         componentInterface.getName(),
                         component.getClass().getName()));
         return (I) component;
+    }
+
+    public <I> I getGlobalComponentByType(final Class<? extends I> componentInterface) {
+        final Collection<? extends I> components = getGlobalComponentsByType(componentInterface);
+        assertTrue(1 == components.size(), () -> "Expected exactly one component of type " + componentInterface.getName());
+        return components.iterator().next();
     }
 
     public <I> Collection<I> getGlobalComponentsByType(final Class<? extends I> componentInterface) {

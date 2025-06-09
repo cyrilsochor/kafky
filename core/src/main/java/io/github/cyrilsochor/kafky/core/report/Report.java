@@ -19,28 +19,42 @@ public class Report {
     public static final String MESSAGES_COUNT_FORMAT = "%8d";
     protected static final DateTimeFormatter CONSOLE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
+    public enum JobStatusFormat {
+        BRIEF,
+        VERBOSE,
+        FULL,
+    }
+
     public static Report of(Properties cfg) {
         return new Report(
                 PropertiesUtils.getLongRequired(cfg, KafkyReportConfig.JOBS_STATUS_PERIOD),
+                PropertiesUtils.getStringRequired(cfg, KafkyReportConfig.JOBS_STATUS_FORMAT),
                 PropertiesUtils.getBooleanRequired(cfg, KafkyReportConfig.SYSTEM_OUT),
                 PropertiesUtils.getBooleanRequired(cfg, KafkyReportConfig.LOG));
     }
 
     protected final long jobsStatusPeriod;
+    protected final JobStatusFormat jobStatusFormat;
     protected final boolean toSystemOut;
     protected final boolean toLog;
 
     protected Report(
             final long jobsStatusPeriod,
+            final String jobStatusFormat,
             final boolean toSystemOut,
             final boolean toLog) {
         this.jobsStatusPeriod = jobsStatusPeriod;
+        this.jobStatusFormat = JobStatusFormat.valueOf(jobStatusFormat.toUpperCase());
         this.toSystemOut = toSystemOut;
         this.toLog = toLog;
     }
 
     public long getJobsStatusPeriod() {
         return jobsStatusPeriod;
+    }
+
+    public JobStatusFormat getJobStatusFormat() {
+        return jobStatusFormat;
     }
 
     @SuppressWarnings("java:S106")

@@ -16,6 +16,6 @@ public interface PairMatcher {
 
     void setProcesserFinishOffset(String topic, int partition, long offset);
 
-    boolean isAllPaired();
+    boolean areAllRequestsPaired();
 
 }

@@ -24,7 +24,7 @@ public class PairedStopCondition implements StopCondition {
     @Override
     public Boolean apply(final ConsumerJobStatus status) {
         for (final PairMatcher pairMatcher : runtime.getGlobalComponentsByType(PairMatcher.class)) {
-            if (!pairMatcher.isAllPaired()) {
+            if (!pairMatcher.areAllRequestsPaired()) {
                 LOG.debug("Stop FALSE (isAllPaired FALSE)");
                 return false;
             }

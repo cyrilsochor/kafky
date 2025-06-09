@@ -17,7 +17,6 @@ public class KafkyProducerConfig {
     public static final String RECORD_PRODUCERS_PACKAGES = "record-producers-packages";
     public static final String DECORATE_HEADERS = "headers";
     public static final String DECORATE_VALUE = "value";
-    public static final String EXPRESSION_FUNCTIONS = "expression-functions";
     public static final String EXPRESSION_CONSTANT_ARRAY_FILES = "expression-constant-array-files";
     public static final String PAIR_MATCHER = "pair-matcher";
     public static final String PAIR_REQUEST_HEADER = "pair-request-header";

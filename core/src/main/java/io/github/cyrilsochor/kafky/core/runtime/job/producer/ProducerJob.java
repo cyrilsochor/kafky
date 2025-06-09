@@ -75,8 +75,8 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
         final long totalCount = getLongRequired(cfg, MESSAGES_COUNT);
         final long warmUpPercent = getLongRequired(cfg, WARM_UP_PERCENT);
         final long measureResponseTimePercent = getLongRequired(cfg, MEASURE_RESPONSE_TIME_PERCENT);
-        job.warmUpCount = totalCount * warmUpPercent / 100;
-        job.measureResponseTimeCount = totalCount * measureResponseTimePercent / 100;
+        job.measureResponseTimeCount = Math.max(1, totalCount * measureResponseTimePercent / 100);
+        job.warmUpCount = Math.min(totalCount * warmUpPercent / 100, totalCount - job.measureResponseTimeCount);
         job.measureThroughputCount = totalCount - job.warmUpCount - job.measureResponseTimeCount;
 
         job.warmUpDelay = PropertiesUtils.getDuration(cfg, KafkyProducerConfig.WARM_UP_DELAY);
@@ -176,9 +176,13 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
         if (rec == null) {
             return IterationResult.stop();
         } else {
-            messageSendSeq++;
-            kafkaProducer.send(rec, (Callback) (metadata, exception) -> notifyListeners(messageLogSeq, rec, metadata, exception));
-            return produced(1, recors.isEmpty());
+            final long sequenceNumber = messageSendSeq++;
+            kafkaProducer.send(rec, (Callback) (metadata, exception) -> notifyListeners(sequenceNumber, rec, metadata, exception));
+            final boolean last = recors.isEmpty();
+            if (last) { // don't finish phase while some notification isn't still delivered, e.g.: InMemoryPairMatcher.addProducedRequest() called
+                waitForNotifications();
+            }
+            return produced(1, last);
         }
     }
 
@@ -187,7 +191,6 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
             final ProducerRecord<Object, Object> producerRecord,
             final RecordMetadata metadata,
             final Exception sendException) {
-        messageLogSeq++;
         final ProducedRecord produced = new ProducedRecord(messageSeq, producerRecord, metadata, sendException);
         for (ProducedRecordListener listener : listeners) {
             try {
@@ -196,6 +199,7 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
                 LOG.error("{} notification error", listener.getClass().getName(), e);
             }
         }
+        messageLogSeq++;
     }
 
     @Override
@@ -203,11 +207,6 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
         recordProducer.close();
         if (kafkaProducer != null) {
             kafkaProducer.close();
-        }
-
-        while (messageLogSeq != messageSendSeq) {
-            LOG.debug("Waiting for metadata ({}!={})", messageLogSeq, messageSendSeq);
-            LockSupport.parkNanos(1_000_000);
         }
 
         for (ProducedRecordListener listener : listeners) {
@@ -265,4 +264,11 @@ public class ProducerJob extends AbstractJob implements Job, FutureRegistry {
         }
     }
 
+    protected void waitForNotifications() {
+        while (messageLogSeq < messageSendSeq) {
+            LOG.debug("Waiting for metadata ({}<={})", messageLogSeq, messageSendSeq);
+            LockSupport.parkNanos(1_000_000);
+        }
+        LOG.debug("Waiting for metadata finished ({}=={})", messageLogSeq, messageSendSeq);
+    }
 }

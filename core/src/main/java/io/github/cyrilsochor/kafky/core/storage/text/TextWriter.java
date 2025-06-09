@@ -5,10 +5,10 @@ import io.github.cyrilsochor.kafky.api.component.Component;
 import io.github.cyrilsochor.kafky.api.job.Consumer;
 import io.github.cyrilsochor.kafky.core.serde.Serdes;
 import io.github.cyrilsochor.kafky.core.storage.model.Message;
+import io.github.cyrilsochor.kafky.core.util.FileUtils;
 
 import java.io.IOException;
 import java.io.Writer;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class TextWriter implements Consumer<Message>, Component {
@@ -21,7 +21,7 @@ public class TextWriter implements Consumer<Message>, Component {
     }
 
     public TextWriter(final Path path) throws IOException {
-        this(Files.newBufferedWriter(path));
+        this(FileUtils.createWriter(path));
     }
 
     @Override

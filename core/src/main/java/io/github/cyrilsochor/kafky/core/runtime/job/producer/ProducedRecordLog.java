@@ -5,6 +5,7 @@ import static java.lang.String.format;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecord;
 import io.github.cyrilsochor.kafky.api.job.producer.ProducedRecordListener;
 import io.github.cyrilsochor.kafky.core.config.KafkyProducerConfig;
+import io.github.cyrilsochor.kafky.core.util.FileUtils;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +30,8 @@ public class ProducedRecordLog implements ProducedRecordListener {
 
         LOG.info("Writing produced messages info log to {}", producerLogPath.toAbsolutePath());
 
-        return new ProducedRecordLog(Files.newBufferedWriter(producerLogPath));
+        return new ProducedRecordLog(FileUtils.createWriter(producerLogPath));
+
     }
 
     protected Writer writer;

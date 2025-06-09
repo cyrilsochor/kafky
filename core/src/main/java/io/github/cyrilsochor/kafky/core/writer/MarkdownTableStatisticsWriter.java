@@ -9,6 +9,7 @@ import static java.time.temporal.ChronoField.MINUTE_OF_HOUR;
 import static java.time.temporal.ChronoField.NANO_OF_SECOND;
 import static java.time.temporal.ChronoField.SECOND_OF_MINUTE;
 
+import io.github.cyrilsochor.kafky.core.util.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,7 +75,7 @@ public class MarkdownTableStatisticsWriter implements StatisticsWriter {
     public void open() throws IOException {
         final boolean exists = Files.exists(path);
         writeHeader = !exists;
-        writer = Files.newBufferedWriter(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        writer = FileUtils.createWriter(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
 
     @Override

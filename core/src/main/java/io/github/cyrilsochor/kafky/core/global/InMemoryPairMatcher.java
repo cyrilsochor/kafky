@@ -26,6 +26,7 @@ import io.github.cyrilsochor.kafky.core.runtime.KafkyRuntime;
 import io.github.cyrilsochor.kafky.core.stats.Statistics;
 import io.github.cyrilsochor.kafky.core.storage.mapper.StorageSerializer;
 import io.github.cyrilsochor.kafky.core.storage.text.TextWriter;
+import io.github.cyrilsochor.kafky.core.util.FileUtils;
 import io.github.cyrilsochor.kafky.core.util.InfoUtils;
 import io.github.cyrilsochor.kafky.core.util.PropertiesUtils;
 import io.github.cyrilsochor.kafky.core.writer.MarkdownTableStatisticsWriter;
@@ -39,7 +40,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Writer;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -335,7 +335,7 @@ public class InMemoryPairMatcher implements Component, PairMatcher {
     protected void writePairs() {
         LOG.info("Writing pairs to {}", pairsOutputPath.toAbsolutePath());
 
-        try (Writer writer = Files.newBufferedWriter(pairsOutputPath)) {
+        try (Writer writer = FileUtils.createWriter(pairsOutputPath)) {
 
             writer.append("Seq");
             writer.append(",");
